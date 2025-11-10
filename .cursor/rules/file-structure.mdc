@@ -1,0 +1,132 @@
+---
+alwaysApply: true
+---
+
+## Goals
+
+- Ship a fast NDC quantity calculator with a **single canonical results page** per calculation.
+- Keep routes minimal; put UI **components outside `app/`**.
+- Deterministic math first; AI assist only for ranking/edge-cases.
+
+## Tech Stack (locked)
+
+- **Framework:** Next.js 15 (App Router) + TypeScript
+- **Runtime:** Node (Edge where safe, else Node)
+- **UI:** React 19, Tailwind CSS 4, Radix primitives, shadcn/ui (generated locally), lucide-react
+- **State/Data:** React Query v5, tRPC v11 (client/react/server), superjson
+- **Auth (optional):** next-auth v5 (Auth.js) + @auth/drizzle-adapter
+- **DB/ORM:** Postgres + drizzle-orm; migrations via drizzle-kit
+- **Validation:** zod; env via @t3-oss/env-nextjs
+- **Charts/UX:** recharts, sonner (toasts)
+- **Utilities:** date-fns, class-variance-authority, clsx
+
+## Routing Policy
+
+- **Do not** create separate “processing” or “results subpages.”
+- One calc = one URL: `/calculator/[id]` (tabs/anchors via `?tab=`).
+- Login is optional; if present, protect `/calculator`, `/calculator/[id]`, `/calculator/history*`.
+
+## File Structure (authoritative)
+
+```
+
+app/
+├─ page.tsx                         # /
+├─ login/
+│  └─ page.tsx                      # /login (optional)
+└─ calculator/
+├─ page.tsx                      # /calculator (form hub)
+├─ [id]/
+│  └─ page.tsx                   # /calculator/[id] (results hub w/ tabs)
+└─ history/
+├─ page.tsx                   # /calculator/history
+└─ [id]/
+└─ page.tsx                # /calculator/history/[id] (read-only)
+
+src/
+├─ components/
+│  ├─ ui/                           # shadcn/ui primitives
+│  ├─ layout/                       # Header, Footer, AppShell
+│  └─ feedback/                     # Toaster, Skeletons, EmptyState
+├─ features/
+│  └─ calculator/
+│     ├─ components/
+│     │  ├─ InputForm.tsx
+│     │  ├─ ResultsTabs.tsx
+│     │  └─ panels/
+│     │     ├─ SummaryPanel.tsx
+│     │     ├─ NdcPanel.tsx
+│     │     ├─ QuantityPanel.tsx
+│     │     ├─ WarningsPanel.tsx
+│     │     └─ JsonPanel.tsx
+│     ├─ hooks/
+│     │  ├─ useTabParam.ts
+│     │  └─ useCalculation.ts
+│     ├─ server/
+│     │  ├─ actions.ts              # createCalculation, exportCalc, copyJson, recalc
+│     │  ├─ loaders.ts              # getCalculationById, getHistory
+│     │  ├─ schema.ts               # zod schemas for inputs/outputs
+│     │  └─ services/
+│     │     ├─ rxnorm.ts            # RxCUI resolution
+│     │     ├─ fdaNdc.ts            # FDA NDC directory lookups
+│     │     └─ aiAssist.ts          # ranking/edge-case guidance
+│     ├─ utils/
+│     │  ├─ sigParser.ts            # normalize SIG
+│     │  ├─ quantityMath.ts         # units + deterministic math
+│     │  └─ formatters.ts
+│     └─ types.ts
+├─ lib/
+│  ├─ db.ts                         # Postgres client setup (drizzle)
+│  ├─ auth.ts                       # next-auth wiring (optional)
+│  └─ telemetry.ts                  # basic analytics/logging
+├─ styles/
+│  └─ globals.css
+└─ config/
+├─ featureFlags.ts
+└─ ndcRules.ts                   # form-specific rules (P1 toggles)
+
+public/
+└─ favicon.ico
+
+```
+
+## Implementation Notes
+
+- `/calculator` renders `InputForm`; submit calls `createCalculation` (server action) → persists row → **redirects** to `/calculator/[id]`.
+- `/calculator/[id]` loads data via `getCalculationById`; renders `ResultsTabs` + panels. Tabs sync with `?tab=summary|ndc|quantity|warnings|json`.
+- Copy/Export are **server actions** (no routes). Show feedback via `sonner`.
+
+## Coding Standards
+
+- **No `any`.** Strong types in `src/features/calculator/types.ts`.
+- Keep files **< 350 LOC**; split logic into `utils/` and `services/`.
+- Prefer **server actions** over ad-hoc API routes; for client caching use React Query.
+- Accessibility: label inputs; keyboard-focus visible; aria on tabs and toasts.
+- Tailwind 4 utilities; keep variant logic in CVA where needed.
+
+## DB & Migrations
+
+- Use drizzle-kit via scripts: `db:generate`, `db:migrate`, `db:push`, `db:studio`.
+- Persist calculations with: inputs, normalized fields (RxCUI, strength/unit), selected NDC, quantity math, warnings, JSON blob.
+
+## Scripts (from package.json)
+
+- `dev`, `build`, `preview`, `start`
+- Lint/format/typecheck: `check`, `lint`, `lint:fix`, `format:check`, `format:write`, `typecheck`
+- Drizzle: `db:generate`, `db:migrate`, `db:push`, `db:studio`
+
+## Guardrails for Cursor
+
+- Do **not** add routes beyond those listed.
+- Do **not** place components inside `app/`.
+- Do **not** create Markdown files or scaffolding docs.
+- Ask if unsure about schema fields or external API responses.
+- pnpm is the preferred package manager.
+
+## Acceptance Criteria
+
+- Submitting `/calculator` redirects to `/calculator/[id]` and shows a loading/skeleton state while data resolves.
+- Tabs switch via `?tab=` without navigation churn; default `summary`.
+- Warnings (inactive NDC, over/underfill) visible in **Warnings** tab and as toasts.
+- “Copy” copies JSON; “Export” downloads JSON/CSV; both via server actions.
+- History links open the same results hub for the selected `[id]`.
