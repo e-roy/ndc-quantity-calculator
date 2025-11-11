@@ -32,10 +32,12 @@ export default async function HistoryDetailPage({ params }: Props) {
   const warnings = calculation.warningsJson;
 
   // Serialize calculation for client component (convert Date to ISO string)
-  const serializedCalculation: SerializedCalculation = {
+  // Type assertion needed because we're converting Date to string
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const serializedCalculation = {
     ...calculation,
     createdAt: calculation.createdAt.toISOString(),
-  };
+  } as SerializedCalculation;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">

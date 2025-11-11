@@ -66,6 +66,7 @@ export function ResultsTabs({
 
       <TabsContent value="summary" className="mt-6">
         <SummaryPanel
+          calculationId={calculation.id}
           normalizedSig={normalizedSig}
           originalSig={originalSig}
           drugOrNdc={drugOrNdc}

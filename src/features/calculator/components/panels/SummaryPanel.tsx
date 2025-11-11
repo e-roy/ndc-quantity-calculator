@@ -1,18 +1,23 @@
 "use client";
 
+import { useState } from "react";
+import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AlertTriangle, Info } from "lucide-react";
+import { AlertTriangle, Info, Download } from "lucide-react";
+import { exportCalculation } from "../../server/actions";
 import type { NormalizedSig, NdcCandidate } from "../../types";
 import { isSigComplete } from "../../utils/sigParser";
 
 type SummaryPanelProps = {
+  calculationId: string;
   normalizedSig: NormalizedSig | null;
   originalSig?: string;
   drugOrNdc?: string;
@@ -20,24 +25,102 @@ type SummaryPanelProps = {
 };
 
 /**
+ * Triggers a file download from a server action response.
+ */
+async function triggerDownload(
+  response: Response,
+  filename: string,
+): Promise<void> {
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
+/**
  * Summary panel component that displays parsed SIG values.
  * Shows gentle warnings if the parse is partial.
  */
 export function SummaryPanel({
+  calculationId,
   normalizedSig,
   originalSig,
   drugOrNdc,
   selectedNdc,
 }: SummaryPanelProps) {
+  const [isExporting, setIsExporting] = useState(false);
   const isComplete = normalizedSig ? isSigComplete(normalizedSig) : false;
   const hasPartialData = normalizedSig && !isComplete;
   const medicationName =
     normalizedSig?.name ?? drugOrNdc ?? "Unknown medication";
 
+  const handleExportJson = async () => {
+    setIsExporting(true);
+    try {
+      const response = await exportCalculation(calculationId, "json");
+      const contentDisposition = response.headers.get("Content-Disposition");
+      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+      const filename = filenameMatch?.[1] ?? `${calculationId}-calculation.json`;
+      await triggerDownload(response, filename);
+      toast.success("JSON exported successfully");
+    } catch (error) {
+      toast.error("Failed to export JSON");
+      console.error("Export error:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    setIsExporting(true);
+    try {
+      const response = await exportCalculation(calculationId, "csv");
+      const contentDisposition = response.headers.get("Content-Disposition");
+      const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+      const filename = filenameMatch?.[1] ?? `${calculationId}-calculation.csv`;
+      await triggerDownload(response, filename);
+      toast.success("CSV exported successfully");
+    } catch (error) {
+      toast.error("Failed to export CSV");
+      console.error("Export error:", error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Summary</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>Summary</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportJson}
+              className="gap-2"
+              disabled={isExporting}
+            >
+              <Download className="size-4" />
+              Export JSON
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              className="gap-2"
+              disabled={isExporting}
+            >
+              <Download className="size-4" />
+              Export CSV
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Medication name display */}
