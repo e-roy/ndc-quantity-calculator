@@ -2,11 +2,7 @@ import { notFound } from "next/navigation";
 import { getCalculationById } from "@/features/calculator/server/loaders";
 import { ResultsTabs } from "@/features/calculator/components/ResultsTabs";
 import { CalculatorInputSchema } from "@/features/calculator/server/schema";
-import type {
-  NdcCandidate,
-  Warning,
-  SerializedCalculation,
-} from "@/features/calculator/types";
+import type { SerializedCalculation } from "@/features/calculator/types";
 
 type Props = {
   params: Promise<{ id: string }>;

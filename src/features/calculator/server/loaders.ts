@@ -3,13 +3,14 @@
  * These functions fetch and process calculation data.
  */
 
-import { eq } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql, count } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { calculations } from "@/server/db/calculator/schema";
 import { CalculatorInputSchema } from "./schema";
 import { parseSig, getPartialParseWarning } from "../utils/sigParser";
 import { resolveToRxcui } from "./services/rxnorm";
 import { computeQuantityWithWarnings } from "../utils/quantityMath";
+import { auth } from "@/server/auth";
 import type {
   Calculation,
   Warning,
@@ -321,4 +322,103 @@ export async function getCalculationById(
 
   // Return calculation as-is (with proper type casting)
   return calculation as Calculation;
+}
+
+/**
+ * History query parameters for filtering and pagination.
+ */
+export type HistoryQueryParams = {
+  page?: number;
+  pageSize?: number;
+  search?: string; // Search in drugOrNdc field
+  fromDate?: Date; // Start date filter
+  toDate?: Date; // End date filter
+};
+
+/**
+ * Result type for history queries.
+ */
+export type HistoryResult = {
+  calculations: Calculation[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+/**
+ * Fetches calculation history with pagination, search, and date filtering.
+ * If auth is enabled, filters by userId from session.
+ */
+export async function getHistory(
+  params: HistoryQueryParams = {},
+): Promise<HistoryResult> {
+  const {
+    page = 1,
+    pageSize = 20,
+    search,
+    fromDate,
+    toDate,
+  } = params;
+
+  // Get session if auth is enabled
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
+  // Build where conditions
+  const conditions = [];
+
+  // Filter by userId if auth is enabled and user is logged in
+  if (userId) {
+    conditions.push(eq(calculations.userId, userId));
+  }
+
+  // Date range filter
+  if (fromDate) {
+    conditions.push(gte(calculations.createdAt, fromDate));
+  }
+  if (toDate) {
+    // Add one day to make it inclusive of the entire day
+    const toDateEnd = new Date(toDate);
+    toDateEnd.setHours(23, 59, 59, 999);
+    conditions.push(lte(calculations.createdAt, toDateEnd));
+  }
+
+  // Search filter (case-insensitive search in JSONB field)
+  if (search?.trim()) {
+    const searchTerm = `%${search.trim()}%`;
+    conditions.push(
+      sql`LOWER(${calculations.inputJson}->>'drugOrNdc') LIKE ${searchTerm}`,
+    );
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  // Get total count
+  const totalResult = await db
+    .select({ count: count() })
+    .from(calculations)
+    .where(whereClause);
+  const total = totalResult[0]?.count ?? 0;
+
+  // Calculate pagination
+  const offset = (page - 1) * pageSize;
+  const totalPages = Math.ceil(total / pageSize);
+
+  // Fetch calculations with pagination
+  const results = await db
+    .select()
+    .from(calculations)
+    .where(whereClause)
+    .orderBy(desc(calculations.createdAt))
+    .limit(pageSize)
+    .offset(offset);
+
+  return {
+    calculations: results as Calculation[],
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
 }

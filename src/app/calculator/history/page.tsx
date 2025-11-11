@@ -1,41 +1,56 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { getHistory } from "@/features/calculator/server/loaders";
+import { HistoryList } from "@/features/calculator/components/HistoryList";
 
-// Fake history data for placeholder
-const fakeHistory = [
-  { id: "1", date: "2024-01-15", medication: "Lisinopril 10mg" },
-  { id: "2", date: "2024-01-14", medication: "Metformin 500mg" },
-  { id: "3", date: "2024-01-13", medication: "Atorvastatin 20mg" },
-];
+type Props = {
+  searchParams: Promise<{
+    page?: string;
+    pageSize?: string;
+    search?: string;
+    fromDate?: string;
+    toDate?: string;
+  }>;
+};
 
-export default function HistoryPage() {
+export default async function HistoryPage({ searchParams }: Props) {
+  const params = await searchParams;
+
+  // Parse pagination params
+  const page = params.page ? parseInt(params.page, 10) : 1;
+  const pageSize = params.pageSize ? parseInt(params.pageSize, 10) : 20;
+
+  // Parse date filters
+  const fromDate = params.fromDate
+    ? (isNaN(Date.parse(params.fromDate))
+        ? undefined
+        : new Date(params.fromDate))
+    : undefined;
+  const toDate = params.toDate
+    ? (isNaN(Date.parse(params.toDate)) ? undefined : new Date(params.toDate))
+    : undefined;
+
+  // Fetch history
+  const result = await getHistory({
+    page: isNaN(page) ? 1 : page,
+    pageSize: isNaN(pageSize) ? 20 : pageSize,
+    search: params.search,
+    fromDate,
+    toDate,
+  });
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">History</h1>
-        <div className="rounded-lg border">
-          <div className="divide-y">
-            {fakeHistory.map((item) => (
-              <Link
-                key={item.id}
-                href={`/calculator/history/${item.id}`}
-                className="block p-4 hover:bg-accent transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{item.medication}</p>
-                    <p className="text-sm text-muted-foreground">{item.date}</p>
-                  </div>
-                  <Button variant="ghost" size="sm" asChild>
-                    <span>View</span>
-                  </Button>
-                </div>
-              </Link>
-            ))}
-          </div>
+        {/* Header */}
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Calculation History</h1>
+          <p className="text-muted-foreground">
+            View and search through your past calculations
+          </p>
         </div>
+
+        {/* History list */}
+        <HistoryList result={result} />
       </div>
     </div>
   );
 }
-
