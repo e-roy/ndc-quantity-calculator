@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
 import { getCalculationById } from "@/features/calculator/server/loaders";
-import { SummaryPanel } from "@/features/calculator/components/panels/SummaryPanel";
+import { ResultsTabs } from "@/features/calculator/components/ResultsTabs";
 import { CalculatorInputSchema } from "@/features/calculator/server/schema";
-import { Skeleton } from "@/components/ui/skeleton";
+import type {
+  NdcCandidate,
+  Warning,
+  SerializedCalculation,
+} from "@/features/calculator/types";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -18,12 +22,24 @@ export default async function CalculatorResultPage({ params }: Props) {
     notFound();
   }
 
-  // Extract original SIG and drugOrNdc from inputJson
+  // Extract original SIG, drugOrNdc, and daysSupply from inputJson
   const input = calculation.inputJson
     ? CalculatorInputSchema.safeParse(calculation.inputJson)
     : null;
   const originalSig = input?.success ? input.data.sig : undefined;
   const drugOrNdc = input?.success ? input.data.drugOrNdc : undefined;
+  const daysSupply = input?.success ? input.data.daysSupply : undefined;
+
+  // Extract selected NDC, candidates, and warnings
+  const selectedNdc = calculation.selectedNdcJson;
+  const ndcCandidates = calculation.ndcCandidatesJson;
+  const warnings = calculation.warningsJson;
+
+  // Serialize calculation for client component (convert Date to ISO string)
+  const serializedCalculation: SerializedCalculation = {
+    ...calculation,
+    createdAt: calculation.createdAt.toISOString(),
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -36,42 +52,17 @@ export default async function CalculatorResultPage({ params }: Props) {
           </p>
         </div>
 
-        {/* Main content sections */}
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Summary panel */}
-          <SummaryPanel
-            normalizedSig={calculation.normalizedJson}
-            originalSig={originalSig}
-            drugOrNdc={drugOrNdc}
-          />
-
-          {/* NDC section skeleton (placeholder for future phases) */}
-          <div className="space-y-4 rounded-lg border p-6">
-            <Skeleton className="h-6 w-24" />
-            <div className="space-y-3">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
-          </div>
-
-          {/* Quantity section skeleton (placeholder for future phases) */}
-          <div className="space-y-4 rounded-lg border p-6">
-            <Skeleton className="h-6 w-36" />
-            <div className="space-y-3">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-4/5" />
-            </div>
-          </div>
-
-          {/* Warnings section skeleton (placeholder for future phases) */}
-          <div className="space-y-4 rounded-lg border p-6">
-            <Skeleton className="h-6 w-28" />
-            <div className="space-y-3">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-            </div>
-          </div>
-        </div>
+        {/* Results tabs */}
+        <ResultsTabs
+          calculation={serializedCalculation}
+          originalSig={originalSig}
+          drugOrNdc={drugOrNdc}
+          daysSupply={daysSupply}
+          selectedNdc={selectedNdc}
+          ndcCandidates={ndcCandidates}
+          warnings={warnings}
+          normalizedSig={calculation.normalizedJson}
+        />
       </div>
     </div>
   );

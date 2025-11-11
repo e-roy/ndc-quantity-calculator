@@ -197,7 +197,8 @@ function extractDoseAndUnit(sig: string): {
   }
 
   // Pattern 2: "Xmg", "Xml", etc. (no space)
-  const noSpacePattern = /(\d+(?:\.\d+)?)\s*(mg|ml|g|l|unit|units|tab|tabs|cap|caps)\b/gi;
+  const noSpacePattern =
+    /(\d+(?:\.\d+)?)\s*(mg|ml|g|l|unit|units|tab|tabs|cap|caps)\b/gi;
   const noSpaceMatch = noSpacePattern.exec(sig);
   if (noSpaceMatch) {
     const match = noSpaceMatch[0];
@@ -282,7 +283,9 @@ export function isSigComplete(parsed: NormalizedSig): boolean {
 /**
  * Generates a warning message for partial SIG parses.
  */
-export function getPartialParseWarning(parsed: NormalizedSig): string | undefined {
+export function getPartialParseWarning(
+  parsed: NormalizedSig,
+): string | undefined {
   const missing: string[] = [];
 
   if (parsed.dose === undefined) {
@@ -301,4 +304,3 @@ export function getPartialParseWarning(parsed: NormalizedSig): string | undefine
 
   return undefined;
 }
-

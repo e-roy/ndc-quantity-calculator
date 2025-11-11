@@ -107,3 +107,11 @@ export type CalculationResult = Calculation & {
   quantityUnit: string;
   selectedNdcJson: NdcCandidate;
 };
+
+/**
+ * Serialized version of Calculation for client components.
+ * Date objects are converted to ISO strings for serialization.
+ */
+export type SerializedCalculation = Omit<Calculation, "createdAt"> & {
+  createdAt: string; // ISO date string
+};

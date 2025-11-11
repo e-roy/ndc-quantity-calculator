@@ -9,13 +9,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AlertTriangle, Info } from "lucide-react";
-import type { NormalizedSig } from "../../types";
+import type { NormalizedSig, NdcCandidate } from "../../types";
 import { isSigComplete } from "../../utils/sigParser";
 
 type SummaryPanelProps = {
   normalizedSig: NormalizedSig | null;
   originalSig?: string;
   drugOrNdc?: string;
+  selectedNdc?: NdcCandidate | null;
 };
 
 /**
@@ -26,6 +27,7 @@ export function SummaryPanel({
   normalizedSig,
   originalSig,
   drugOrNdc,
+  selectedNdc,
 }: SummaryPanelProps) {
   const isComplete = normalizedSig ? isSigComplete(normalizedSig) : false;
   const hasPartialData = normalizedSig && !isComplete;
@@ -65,6 +67,35 @@ export function SummaryPanel({
               Original SIG
             </p>
             <p className="text-sm">{originalSig}</p>
+          </div>
+        )}
+
+        {/* Selected NDC */}
+        {selectedNdc && (
+          <div className="space-y-2 rounded-lg border bg-muted/50 p-4">
+            <p className="text-muted-foreground text-sm font-medium">
+              Selected NDC
+            </p>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <p className="font-mono text-sm font-medium">{selectedNdc.ndc}</p>
+                {selectedNdc.active ? (
+                  <Badge variant="default" className="text-xs">
+                    Active
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive" className="text-xs">
+                    Inactive
+                  </Badge>
+                )}
+                {selectedNdc.matchScore !== undefined && (
+                  <Badge variant="secondary" className="text-xs">
+                    Confidence: {(selectedNdc.matchScore * 100).toFixed(0)}%
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm">{selectedNdc.productName}</p>
+            </div>
           </div>
         )}
 

@@ -9,7 +9,13 @@ import { calculations } from "@/server/db/calculator/schema";
 import { CalculatorInputSchema } from "./schema";
 import { parseSig, getPartialParseWarning } from "../utils/sigParser";
 import { resolveToRxcui } from "./services/rxnorm";
-import type { Calculation, Warning } from "../types";
+import { computeQuantityWithWarnings } from "../utils/quantityMath";
+import type {
+  Calculation,
+  Warning,
+  NdcCandidate,
+  NormalizedSig,
+} from "../types";
 
 /**
  * Fetches a calculation by ID.
@@ -99,11 +105,35 @@ export async function getCalculationById(
         }
       }
 
+      // Compute quantity if not already calculated
+      let quantityValue: string | null = calculation.quantityValue;
+      let quantityUnit: string | null = calculation.quantityUnit;
+      const selectedNdc = calculation.selectedNdcJson
+        ? (calculation.selectedNdcJson as NdcCandidate)
+        : null;
+
+      if (!quantityValue && input.data.daysSupply) {
+        const quantityResult = computeQuantityWithWarnings(
+          normalized,
+          input.data.daysSupply,
+          selectedNdc,
+        );
+
+        if (quantityResult.quantity) {
+          quantityValue = quantityResult.quantity.quantityValue.toString();
+          quantityUnit = quantityResult.quantity.quantityUnit;
+          // Merge overfill/underfill warnings
+          newWarnings.push(...quantityResult.warnings);
+        }
+      }
+
       // Update calculation in database
       await db
         .update(calculations)
         .set({
           normalizedJson: normalized,
+          quantityValue,
+          quantityUnit,
           warningsJson: newWarnings.length > 0 ? newWarnings : null,
         })
         .where(eq(calculations.id, id));
@@ -112,6 +142,8 @@ export async function getCalculationById(
       return {
         ...calculation,
         normalizedJson: normalized,
+        quantityValue,
+        quantityUnit,
         warningsJson: newWarnings.length > 0 ? newWarnings : null,
       } as Calculation;
     }
@@ -157,11 +189,35 @@ export async function getCalculationById(
           });
         }
 
+        // Compute quantity if not already calculated
+        let quantityValue: string | null = calculation.quantityValue;
+        let quantityUnit: string | null = calculation.quantityUnit;
+        const selectedNdc = calculation.selectedNdcJson
+          ? (calculation.selectedNdcJson as NdcCandidate)
+          : null;
+
+        if (!quantityValue && input.data.daysSupply) {
+          const quantityResult = computeQuantityWithWarnings(
+            updatedNormalized as NormalizedSig,
+            input.data.daysSupply,
+            selectedNdc,
+          );
+
+          if (quantityResult.quantity) {
+            quantityValue = quantityResult.quantity.quantityValue.toString();
+            quantityUnit = quantityResult.quantity.quantityUnit;
+            // Merge overfill/underfill warnings
+            newWarnings.push(...quantityResult.warnings);
+          }
+        }
+
         // Update calculation in database
         await db
           .update(calculations)
           .set({
             normalizedJson: updatedNormalized,
+            quantityValue,
+            quantityUnit,
             warningsJson: newWarnings.length > 0 ? newWarnings : null,
           })
           .where(eq(calculations.id, id));
@@ -170,6 +226,8 @@ export async function getCalculationById(
         return {
           ...calculation,
           normalizedJson: updatedNormalized,
+          quantityValue,
+          quantityUnit,
           warningsJson: newWarnings.length > 0 ? newWarnings : null,
         } as Calculation;
       } else {
@@ -204,6 +262,59 @@ export async function getCalculationById(
             warningsJson: newWarnings.length > 0 ? newWarnings : null,
           } as Calculation;
         }
+      }
+    }
+  }
+
+  // Check if quantity needs to be computed (normalizedJson exists but quantityValue is null)
+  if (
+    calculation.normalizedJson &&
+    !calculation.quantityValue &&
+    calculation.inputJson
+  ) {
+    const input = CalculatorInputSchema.safeParse(calculation.inputJson);
+    if (input.success && input.data.daysSupply) {
+      const normalized = calculation.normalizedJson as NormalizedSig;
+      const selectedNdc = calculation.selectedNdcJson
+        ? (calculation.selectedNdcJson as NdcCandidate)
+        : null;
+
+      const quantityResult = computeQuantityWithWarnings(
+        normalized,
+        input.data.daysSupply,
+        selectedNdc,
+      );
+
+      if (quantityResult.quantity) {
+        const quantityValue = quantityResult.quantity.quantityValue.toString();
+        const quantityUnit = quantityResult.quantity.quantityUnit;
+
+        // Get existing warnings
+        const existingWarnings: Warning[] = calculation.warningsJson
+          ? (calculation.warningsJson as Warning[])
+          : [];
+        const newWarnings: Warning[] = [
+          ...existingWarnings,
+          ...quantityResult.warnings,
+        ];
+
+        // Update calculation in database
+        await db
+          .update(calculations)
+          .set({
+            quantityValue,
+            quantityUnit,
+            warningsJson: newWarnings.length > 0 ? newWarnings : null,
+          })
+          .where(eq(calculations.id, id));
+
+        // Return updated calculation
+        return {
+          ...calculation,
+          quantityValue,
+          quantityUnit,
+          warningsJson: newWarnings.length > 0 ? newWarnings : null,
+        } as Calculation;
       }
     }
   }
