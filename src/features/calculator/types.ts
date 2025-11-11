@@ -13,13 +13,17 @@ export type CalculationStatus = "pending" | "ready" | "error";
 /**
  * Normalized SIG (prescription instructions) structure.
  * Represents parsed and standardized prescription instructions.
+ * Phase 6: Extended with RxNorm resolution (rxcui, name, strength, form).
  */
 export const NormalizedSigSchema = z.object({
-  frequency: z.string().optional(), // e.g., "twice daily", "BID"
-  quantityPerDose: z.number().optional(), // e.g., 1, 2
-  unit: z.string().optional(), // e.g., "tablet", "ml", "mg"
-  route: z.string().optional(), // e.g., "oral", "topical"
-  additionalInstructions: z.string().optional(),
+  rxcui: z.string().optional(), // RxNorm concept ID
+  name: z.string().optional(), // Resolved medication name from RxNorm
+  strength: z.string().optional(), // Medication strength (e.g., "10mg", "5mg/5ml")
+  form: z.string().optional(), // Dosage form (e.g., "TABLET", "CAPSULE", "SOLUTION")
+  dose: z.number().optional(), // Numeric dose value (e.g., 1, 2, 10)
+  doseUnit: z.string().optional(), // Unit of dose (e.g., "tablet", "ml", "mg", "capsule")
+  frequencyPerDay: z.number().optional(), // Frequency per day (e.g., 1, 2, 3, 4)
+  route: z.string().optional(), // Route of administration (e.g., "oral", "topical", "injection")
 });
 
 export type NormalizedSig = z.infer<typeof NormalizedSigSchema>;
@@ -57,6 +61,7 @@ export const WarningSchema = z.object({
     "unit_mismatch",
     "missing_ndc",
     "invalid_sig",
+    "unresolved_rxcui",
     "other",
   ]),
   severity: z.enum(["error", "warning", "info"]).default("warning"),
@@ -102,4 +107,3 @@ export type CalculationResult = Calculation & {
   quantityUnit: string;
   selectedNdcJson: NdcCandidate;
 };
-

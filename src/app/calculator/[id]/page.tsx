@@ -1,3 +1,7 @@
+import { notFound } from "next/navigation";
+import { getCalculationById } from "@/features/calculator/server/loaders";
+import { SummaryPanel } from "@/features/calculator/components/panels/SummaryPanel";
+import { CalculatorInputSchema } from "@/features/calculator/server/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type Props = {
@@ -5,29 +9,43 @@ type Props = {
 };
 
 export default async function CalculatorResultPage({ params }: Props) {
-  await params; // id will be used in Phase 5 when loading calculation data
+  const { id } = await params;
+
+  // Load calculation data (will compute normalizedJson if empty)
+  const calculation = await getCalculationById(id);
+
+  if (!calculation) {
+    notFound();
+  }
+
+  // Extract original SIG and drugOrNdc from inputJson
+  const input = calculation.inputJson
+    ? CalculatorInputSchema.safeParse(calculation.inputJson)
+    : null;
+  const originalSig = input?.success ? input.data.sig : undefined;
+  const drugOrNdc = input?.success ? input.data.drugOrNdc : undefined;
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="space-y-6">
-        {/* Header skeleton */}
+        {/* Header */}
         <div className="space-y-2">
-          <Skeleton className="h-9 w-64" />
-          <Skeleton className="h-5 w-96" />
+          <h1 className="text-3xl font-bold">Calculation Results</h1>
+          <p className="text-muted-foreground">
+            Calculation ID: {calculation.id}
+          </p>
         </div>
 
-        {/* Main content sections skeleton */}
+        {/* Main content sections */}
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Summary section skeleton */}
-          <div className="space-y-4 rounded-lg border p-6">
-            <Skeleton className="h-6 w-32" />
-            <div className="space-y-3">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-5/6" />
-            </div>
-          </div>
+          {/* Summary panel */}
+          <SummaryPanel
+            normalizedSig={calculation.normalizedJson}
+            originalSig={originalSig}
+            drugOrNdc={drugOrNdc}
+          />
 
-          {/* NDC section skeleton */}
+          {/* NDC section skeleton (placeholder for future phases) */}
           <div className="space-y-4 rounded-lg border p-6">
             <Skeleton className="h-6 w-24" />
             <div className="space-y-3">
@@ -36,7 +54,7 @@ export default async function CalculatorResultPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Quantity section skeleton */}
+          {/* Quantity section skeleton (placeholder for future phases) */}
           <div className="space-y-4 rounded-lg border p-6">
             <Skeleton className="h-6 w-36" />
             <div className="space-y-3">
@@ -45,7 +63,7 @@ export default async function CalculatorResultPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Warnings section skeleton */}
+          {/* Warnings section skeleton (placeholder for future phases) */}
           <div className="space-y-4 rounded-lg border p-6">
             <Skeleton className="h-6 w-28" />
             <div className="space-y-3">
