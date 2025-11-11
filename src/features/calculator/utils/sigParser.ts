@@ -43,6 +43,22 @@ const UNIT_NORMALIZATION: Record<string, string> = {
   puffs: "puff",
   spray: "spray",
   sprays: "spray",
+  // Liquid volume units (for conversion)
+  teaspoon: "ml", // 1 tsp = ~5ml
+  tsp: "ml",
+  teaspoons: "ml",
+  tsps: "ml",
+  tablespoon: "ml", // 1 tbsp = ~15ml
+  tbsp: "ml",
+  tablespoons: "ml",
+  cup: "ml", // 1 cup = ~240ml
+  cups: "ml",
+  oz: "ml", // 1 oz = ~30ml (fluid ounce)
+  ounce: "ml",
+  ounces: "ml",
+  "fl oz": "ml",
+  "fluid ounce": "ml",
+  "fluid ounces": "ml",
 };
 
 /**
@@ -246,8 +262,61 @@ function extractDoseAndUnit(sig: string): {
 }
 
 /**
+ * Detects special dosage form from SIG text and parsed data.
+ * Returns form type: "liquid", "insulin", "inhaler", or undefined.
+ */
+function detectDosageForm(
+  sig: string,
+  doseUnit: string | undefined,
+  route: string | undefined,
+): "liquid" | "insulin" | "inhaler" | undefined {
+  const lowerSig = sig.toLowerCase();
+  const lowerUnit = doseUnit?.toLowerCase() ?? "";
+
+  // Detect inhaler (puffs, sprays, inhalation route)
+  if (
+    route === "inhalation" ||
+    lowerSig.includes("inhal") ||
+    lowerUnit === "puff" ||
+    lowerUnit === "spray"
+  ) {
+    return "inhaler";
+  }
+
+  // Detect insulin (units, insulin keyword)
+  if (
+    lowerUnit === "unit" ||
+    lowerSig.includes("insulin") ||
+    lowerSig.includes("units")
+  ) {
+    // Additional check: if it's clearly insulin context
+    if (lowerSig.includes("insulin") || (lowerUnit === "unit" && lowerSig.includes("subcutaneous"))) {
+      return "insulin";
+    }
+  }
+
+  // Detect liquid (ml, teaspoon, tablespoon, etc.)
+  if (
+    lowerUnit === "ml" ||
+    lowerUnit === "l" ||
+    lowerSig.includes("teaspoon") ||
+    lowerSig.includes("tsp") ||
+    lowerSig.includes("tablespoon") ||
+    lowerSig.includes("tbsp") ||
+    lowerSig.includes("ounce") ||
+    lowerSig.includes("fl oz") ||
+    route === "oral" && (lowerUnit === "ml" || lowerUnit === "l")
+  ) {
+    return "liquid";
+  }
+
+  return undefined;
+}
+
+/**
  * Parses a SIG string and returns normalized values.
  * Returns partial results if some fields cannot be parsed.
+ * Detects special dosage forms (liquid, insulin, inhaler).
  */
 export function parseSig(sig: string): NormalizedSig {
   const trimmedSig = sig.trim();
@@ -260,11 +329,15 @@ export function parseSig(sig: string): NormalizedSig {
   const frequencyPerDay = extractFrequencyPerDay(trimmedSig);
   const route = extractRoute(trimmedSig);
 
+  // Detect dosage form
+  const form = detectDosageForm(trimmedSig, doseUnit, route);
+
   return {
     dose,
     doseUnit,
     frequencyPerDay,
     route,
+    dosageForm: form, // Add detected dosage form to normalized SIG
   };
 }
 

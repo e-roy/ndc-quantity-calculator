@@ -12,16 +12,20 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AlertTriangle, Info, Download, Sparkles } from "lucide-react";
+import { AlertTriangle, Info, Download, Sparkles, XCircle } from "lucide-react";
 import { exportCalculation } from "../../server/actions";
 import type { NormalizedSig, NdcCandidate } from "../../types";
 import { isSigComplete } from "../../utils/sigParser";
+import { parsePackageSize, calculateMultiPack, type MultiPackResult } from "../../utils/quantityMath";
 
 type SummaryPanelProps = {
   calculationId: string;
   normalizedSig: NormalizedSig | null;
   originalSig?: string;
   drugOrNdc?: string;
+  daysSupply?: number;
+  quantityValue?: string | null;
+  quantityUnit?: string | null;
   selectedNdc?: NdcCandidate | null;
   aiNotes?: string | null;
   ndcCandidates?: NdcCandidate[] | null;
@@ -54,6 +58,9 @@ export function SummaryPanel({
   normalizedSig,
   originalSig,
   drugOrNdc,
+  daysSupply: _daysSupply,
+  quantityValue,
+  quantityUnit,
   selectedNdc,
   aiNotes,
   ndcCandidates,
@@ -66,6 +73,19 @@ export function SummaryPanel({
     normalizedSig?.name ?? drugOrNdc ?? "Unknown medication";
   const hasAiSuggestion = !!aiNotes && !!selectedNdc;
   const hasAlternatives = ndcCandidates && ndcCandidates.length > 1;
+
+  // Calculate multi-pack information
+  const packageSize = selectedNdc
+    ? parsePackageSize(selectedNdc.packageDescription)
+    : null;
+  const multiPack: MultiPackResult =
+    quantityValue && quantityUnit && packageSize
+      ? calculateMultiPack(
+          Number.parseFloat(quantityValue),
+          quantityUnit,
+          packageSize,
+        )
+      : null;
 
   const handleViewAlternatives = () => {
     // Navigate to NDC tab by updating URL
@@ -170,7 +190,22 @@ export function SummaryPanel({
 
         {/* Suggested/Selected NDC */}
         {selectedNdc && (
-          <div className="space-y-2 rounded-lg border bg-muted/50 p-4">
+          <div
+            className={`space-y-2 rounded-lg border p-4 ${
+              !selectedNdc.active
+                ? "border-destructive bg-destructive/5"
+                : "bg-muted/50"
+            }`}
+          >
+            {!selectedNdc.active && (
+              <Alert variant="destructive" className="mb-2">
+                <XCircle className="size-4" />
+                <AlertTitle className="font-bold">Inactive NDC Warning</AlertTitle>
+                <AlertDescription>
+                  This NDC is no longer active. Please select an active alternative from the NDC tab.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="flex items-center justify-between">
               <p className="text-muted-foreground text-sm font-medium">
                 {hasAiSuggestion ? "Suggested NDC" : "Selected NDC"}
@@ -190,7 +225,8 @@ export function SummaryPanel({
                     Active
                   </Badge>
                 ) : (
-                  <Badge variant="destructive" className="text-xs">
+                  <Badge variant="destructive" className="text-xs animate-pulse">
+                    <AlertTriangle className="mr-1 size-3" />
                     Inactive
                   </Badge>
                 )}
@@ -220,6 +256,41 @@ export function SummaryPanel({
                 </Button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Multi-pack information */}
+        {multiPack && multiPack.packageCount > 0 && (
+          <div className="space-y-2 rounded-lg border bg-primary/5 p-4">
+            <p className="text-muted-foreground text-sm font-medium">
+              Packages Required
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xl font-semibold">
+                {multiPack.packageCount}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                package{multiPack.packageCount > 1 ? "s" : ""}
+              </span>
+              {multiPack.remainder > 0 && (
+                <>
+                  <span className="text-muted-foreground">+</span>
+                  <span className="text-sm font-medium">
+                    {multiPack.remainder.toFixed(1).replace(/\.0$/, "")}
+                  </span>
+                  {quantityUnit && (
+                    <Badge variant="outline" className="text-xs">
+                      {quantityUnit}
+                    </Badge>
+                  )}
+                </>
+              )}
+            </div>
+            {quantityValue && quantityUnit && (
+              <p className="text-muted-foreground text-xs">
+                Total quantity: {Number.parseFloat(quantityValue).toFixed(1).replace(/\.0$/, "")} {quantityUnit}
+              </p>
+            )}
           </div>
         )}
 

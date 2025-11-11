@@ -24,17 +24,34 @@ export function WarningsPanel({ warnings }: WarningsPanelProps) {
     if (hasWarnings) {
       const errorCount = warningList.filter((w) => w.severity === "error").length;
       const warningCount = warningList.filter((w) => w.severity === "warning").length;
+      const inactiveNdcWarnings = warningList.filter((w) => w.type === "inactive_ndc");
 
-      if (errorCount > 0) {
+      // Prioritize inactive NDC warnings
+      if (inactiveNdcWarnings.length > 0) {
+        toast.error(
+          `Inactive NDC detected: The selected NDC is no longer active. Please select an active alternative.`,
+          {
+            duration: 8000, // Longer duration for critical warnings
+          },
+        );
+      } else if (errorCount > 0) {
         toast.error(
           `${errorCount} error${errorCount > 1 ? "s" : ""} found in calculation`,
+          {
+            duration: 6000,
+          },
         );
       } else if (warningCount > 0) {
         toast.warning(
           `${warningCount} warning${warningCount > 1 ? "s" : ""} found in calculation`,
+          {
+            duration: 5000,
+          },
         );
       } else {
-        toast.info(`${warningList.length} information notice${warningList.length > 1 ? "s" : ""}`);
+        toast.info(`${warningList.length} information notice${warningList.length > 1 ? "s" : ""}`, {
+          duration: 4000,
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,17 +102,32 @@ export function WarningsPanel({ warnings }: WarningsPanelProps) {
             {warningItems.length > 0 && (
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold">Warnings ({warningItems.length})</h3>
-                {warningItems.map((warning, index) => (
-                  <Alert key={index} variant="default">
-                    <AlertTriangle className="size-4" />
-                    <AlertTitle>
-                      {warning.type.replace(/_/g, " ").replace(/\b\w/g, (l) =>
-                        l.toUpperCase(),
-                      )}
-                    </AlertTitle>
-                    <AlertDescription>{warning.message}</AlertDescription>
-                  </Alert>
-                ))}
+                {warningItems.map((warning, index) => {
+                  // Make inactive NDC warnings more prominent
+                  const isInactiveNdc = warning.type === "inactive_ndc";
+                  return (
+                    <Alert
+                      key={index}
+                      variant={isInactiveNdc ? "destructive" : "default"}
+                      className={isInactiveNdc ? "border-2 border-destructive" : ""}
+                    >
+                      <AlertTriangle className="size-4" />
+                      <AlertTitle className={isInactiveNdc ? "font-bold" : ""}>
+                        {warning.type.replace(/_/g, " ").replace(/\b\w/g, (l) =>
+                          l.toUpperCase(),
+                        )}
+                        {isInactiveNdc && (
+                          <span className="ml-2 text-xs font-normal text-destructive">
+                            (Critical)
+                          </span>
+                        )}
+                      </AlertTitle>
+                      <AlertDescription className={isInactiveNdc ? "font-medium" : ""}>
+                        {warning.message}
+                      </AlertDescription>
+                    </Alert>
+                  );
+                })}
               </div>
             )}
 

@@ -70,6 +70,9 @@ export function ResultsTabs({
           normalizedSig={normalizedSig}
           originalSig={originalSig}
           drugOrNdc={drugOrNdc}
+          daysSupply={daysSupply}
+          quantityValue={calculation.quantityValue}
+          quantityUnit={calculation.quantityUnit}
           selectedNdc={selectedNdc}
           aiNotes={calculation.aiNotes}
           ndcCandidates={ndcCandidates}

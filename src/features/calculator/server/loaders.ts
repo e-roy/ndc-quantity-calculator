@@ -9,6 +9,8 @@ import { calculations } from "@/server/db/calculator/schema";
 import { CalculatorInputSchema } from "./schema";
 import { parseSig, getPartialParseWarning } from "../utils/sigParser";
 import { resolveToRxcui } from "./services/rxnorm";
+import { searchFdaNdcByRxNorm, searchFdaNdc } from "./services/fdaNdc";
+import { selectOptimalNdc } from "./services/ndcSelection";
 import { computeQuantityWithWarnings } from "../utils/quantityMath";
 import { rankNdcCandidates } from "./services/aiAssist";
 import { auth } from "@/server/auth";
@@ -107,12 +109,113 @@ export async function getCalculationById(
         }
       }
 
+      // Fetch NDC candidates from FDA if not already present
+      let ndcCandidates: NdcCandidate[] | null = calculation.ndcCandidatesJson
+        ? (calculation.ndcCandidatesJson as NdcCandidate[])
+        : null;
+
+      if (!ndcCandidates || ndcCandidates.length === 0) {
+        try {
+          console.log(
+            `[Loader] Fetching NDC candidates for: "${input.data.drugOrNdc}"`,
+          );
+
+          // Try to fetch by RxNorm result if available
+          if (normalized.rxcui && normalized.name) {
+            const candidates = await searchFdaNdcByRxNorm(
+              { rxcui: normalized.rxcui, name: normalized.name },
+              100,
+            );
+            if (candidates.length > 0) {
+              ndcCandidates = candidates;
+              console.log(
+                `[Loader] Found ${candidates.length} NDC candidates from FDA`,
+              );
+            }
+          }
+
+          // If no candidates from RxNorm search, try direct NDC search if input is an NDC
+          if (
+            (!ndcCandidates || ndcCandidates.length === 0) &&
+            input.data.drugOrNdc
+          ) {
+            // Check if input looks like an NDC (contains digits and possibly dashes)
+            const ndcPattern = /^\d{4,5}-?\d{3,4}-?\d{1,2}$/;
+            if (ndcPattern.test(input.data.drugOrNdc.replace(/\s/g, ""))) {
+              const candidates = await searchFdaNdc({
+                ndc: input.data.drugOrNdc,
+              });
+              if (candidates.length > 0) {
+                ndcCandidates = candidates;
+                console.log(
+                  `[Loader] Found ${candidates.length} NDC candidates from direct NDC search`,
+                );
+              }
+            }
+          }
+
+          // If still no candidates, try searching by product name
+          if (
+            (!ndcCandidates || ndcCandidates.length === 0) &&
+            input.data.drugOrNdc
+          ) {
+            const candidates = await searchFdaNdc({
+              productName: input.data.drugOrNdc,
+            });
+            if (candidates.length > 0) {
+              ndcCandidates = candidates;
+              console.log(
+                `[Loader] Found ${candidates.length} NDC candidates from product name search`,
+              );
+            }
+          }
+
+          // Add warning if no NDCs found
+          if (!ndcCandidates || ndcCandidates.length === 0) {
+            newWarnings.push({
+              type: "missing_ndc",
+              severity: "warning",
+              message: `No NDC candidates found for "${input.data.drugOrNdc}". The calculation may be incomplete.`,
+              field: "drugOrNdc",
+            });
+          }
+        } catch (error) {
+          // Log but don't throw - graceful degradation
+          console.error("[Loader] FDA NDC search failed:", error);
+          newWarnings.push({
+            type: "other",
+            severity: "warning",
+            message:
+              "Failed to fetch NDC candidates from FDA. The calculation may be incomplete.",
+            field: "drugOrNdc",
+          });
+        }
+      }
+
+      // Select optimal NDC using deterministic logic if candidates exist and no selection yet
+      let selectedNdc: NdcCandidate | null = calculation.selectedNdcJson
+        ? (calculation.selectedNdcJson as NdcCandidate)
+        : null;
+
+      if (!selectedNdc && ndcCandidates && ndcCandidates.length > 0) {
+        console.log(
+          `[Loader] Selecting optimal NDC from ${ndcCandidates.length} candidates`,
+        );
+        selectedNdc = selectOptimalNdc(
+          ndcCandidates,
+          normalized,
+          input.data.daysSupply,
+        );
+        if (selectedNdc) {
+          console.log(
+            `[Loader] Selected NDC: ${selectedNdc.ndc} (${selectedNdc.productName})`,
+          );
+        }
+      }
+
       // Compute quantity if not already calculated
       let quantityValue: string | null = calculation.quantityValue;
       let quantityUnit: string | null = calculation.quantityUnit;
-      const selectedNdc = calculation.selectedNdcJson
-        ? (calculation.selectedNdcJson as NdcCandidate)
-        : null;
 
       if (!quantityValue && input.data.daysSupply) {
         const quantityResult = computeQuantityWithWarnings(
@@ -134,6 +237,9 @@ export async function getCalculationById(
         .update(calculations)
         .set({
           normalizedJson: normalized,
+          ndcCandidatesJson:
+            ndcCandidates && ndcCandidates.length > 0 ? ndcCandidates : null,
+          selectedNdcJson: selectedNdc,
           quantityValue,
           quantityUnit,
           warningsJson: newWarnings.length > 0 ? newWarnings : null,
@@ -144,6 +250,9 @@ export async function getCalculationById(
       return {
         ...calculation,
         normalizedJson: normalized,
+        ndcCandidatesJson:
+          ndcCandidates && ndcCandidates.length > 0 ? ndcCandidates : null,
+        selectedNdcJson: selectedNdc,
         quantityValue,
         quantityUnit,
         warningsJson: newWarnings.length > 0 ? newWarnings : null,
@@ -191,12 +300,111 @@ export async function getCalculationById(
           });
         }
 
+        // Fetch NDC candidates from FDA if not already present
+        let ndcCandidates: NdcCandidate[] | null = calculation.ndcCandidatesJson
+          ? (calculation.ndcCandidatesJson as NdcCandidate[])
+          : null;
+
+        if (!ndcCandidates || ndcCandidates.length === 0) {
+          try {
+            console.log(
+              `[Loader] Fetching NDC candidates for: "${input.data.drugOrNdc}"`,
+            );
+
+            // Try to fetch by RxNorm result
+            if (rxnormResult.rxcui && rxnormResult.name) {
+              const candidates = await searchFdaNdcByRxNorm(
+                { rxcui: rxnormResult.rxcui, name: rxnormResult.name },
+                100,
+              );
+              if (candidates.length > 0) {
+                ndcCandidates = candidates;
+                console.log(
+                  `[Loader] Found ${candidates.length} NDC candidates from FDA`,
+                );
+              }
+            }
+
+            // If no candidates from RxNorm search, try direct NDC search if input is an NDC
+            if (
+              (!ndcCandidates || ndcCandidates.length === 0) &&
+              input.data.drugOrNdc
+            ) {
+              const ndcPattern = /^\d{4,5}-?\d{3,4}-?\d{1,2}$/;
+              if (ndcPattern.test(input.data.drugOrNdc.replace(/\s/g, ""))) {
+                const candidates = await searchFdaNdc({
+                  ndc: input.data.drugOrNdc,
+                });
+                if (candidates.length > 0) {
+                  ndcCandidates = candidates;
+                  console.log(
+                    `[Loader] Found ${candidates.length} NDC candidates from direct NDC search`,
+                  );
+                }
+              }
+            }
+
+            // If still no candidates, try searching by product name
+            if (
+              (!ndcCandidates || ndcCandidates.length === 0) &&
+              input.data.drugOrNdc
+            ) {
+              const candidates = await searchFdaNdc({
+                productName: input.data.drugOrNdc,
+              });
+              if (candidates.length > 0) {
+                ndcCandidates = candidates;
+                console.log(
+                  `[Loader] Found ${candidates.length} NDC candidates from product name search`,
+                );
+              }
+            }
+
+            // Add warning if no NDCs found
+            if (!ndcCandidates || ndcCandidates.length === 0) {
+              newWarnings.push({
+                type: "missing_ndc",
+                severity: "warning",
+                message: `No NDC candidates found for "${input.data.drugOrNdc}". The calculation may be incomplete.`,
+                field: "drugOrNdc",
+              });
+            }
+          } catch (error) {
+            console.error("[Loader] FDA NDC search failed:", error);
+            newWarnings.push({
+              type: "other",
+              severity: "warning",
+              message:
+                "Failed to fetch NDC candidates from FDA. The calculation may be incomplete.",
+              field: "drugOrNdc",
+            });
+          }
+        }
+
+        // Select optimal NDC using deterministic logic if candidates exist and no selection yet
+        let selectedNdc: NdcCandidate | null = calculation.selectedNdcJson
+          ? (calculation.selectedNdcJson as NdcCandidate)
+          : null;
+
+        if (!selectedNdc && ndcCandidates && ndcCandidates.length > 0) {
+          console.log(
+            `[Loader] Selecting optimal NDC from ${ndcCandidates.length} candidates`,
+          );
+          selectedNdc = selectOptimalNdc(
+            ndcCandidates,
+            updatedNormalized as NormalizedSig,
+            input.data.daysSupply,
+          );
+          if (selectedNdc) {
+            console.log(
+              `[Loader] Selected NDC: ${selectedNdc.ndc} (${selectedNdc.productName})`,
+            );
+          }
+        }
+
         // Compute quantity if not already calculated
         let quantityValue: string | null = calculation.quantityValue;
         let quantityUnit: string | null = calculation.quantityUnit;
-        const selectedNdc = calculation.selectedNdcJson
-          ? (calculation.selectedNdcJson as NdcCandidate)
-          : null;
 
         if (!quantityValue && input.data.daysSupply) {
           const quantityResult = computeQuantityWithWarnings(
@@ -218,6 +426,9 @@ export async function getCalculationById(
           .update(calculations)
           .set({
             normalizedJson: updatedNormalized,
+            ndcCandidatesJson:
+              ndcCandidates && ndcCandidates.length > 0 ? ndcCandidates : null,
+            selectedNdcJson: selectedNdc,
             quantityValue,
             quantityUnit,
             warningsJson: newWarnings.length > 0 ? newWarnings : null,
@@ -228,6 +439,9 @@ export async function getCalculationById(
         return {
           ...calculation,
           normalizedJson: updatedNormalized,
+          ndcCandidatesJson:
+            ndcCandidates && ndcCandidates.length > 0 ? ndcCandidates : null,
+          selectedNdcJson: selectedNdc,
           quantityValue,
           quantityUnit,
           warningsJson: newWarnings.length > 0 ? newWarnings : null,
@@ -321,6 +535,165 @@ export async function getCalculationById(
     }
   }
 
+  // Check if NDC candidates need to be fetched (normalizedJson exists but ndcCandidatesJson is null)
+  if (
+    calculation.normalizedJson &&
+    (!calculation.ndcCandidatesJson ||
+      (Array.isArray(calculation.ndcCandidatesJson) &&
+        calculation.ndcCandidatesJson.length === 0)) &&
+    calculation.inputJson
+  ) {
+    const input = CalculatorInputSchema.safeParse(calculation.inputJson);
+    if (input.success && input.data.drugOrNdc) {
+      const normalized = calculation.normalizedJson as NormalizedSig;
+      const existingWarnings: Warning[] = calculation.warningsJson
+        ? (calculation.warningsJson as Warning[])
+        : [];
+      const newWarnings: Warning[] = [...existingWarnings];
+
+      try {
+        console.log(
+          `[Loader] Fetching NDC candidates (lazy load) for: "${input.data.drugOrNdc}"`,
+        );
+
+        let ndcCandidates: NdcCandidate[] | null = null;
+
+        // Try to fetch by RxNorm result if available
+        if (normalized.rxcui && normalized.name) {
+          const candidates = await searchFdaNdcByRxNorm(
+            { rxcui: normalized.rxcui, name: normalized.name },
+            100,
+          );
+          if (candidates.length > 0) {
+            ndcCandidates = candidates;
+            console.log(
+              `[Loader] Found ${candidates.length} NDC candidates from FDA (lazy load)`,
+            );
+          }
+        }
+
+        // If no candidates from RxNorm search, try direct NDC search if input is an NDC
+        if (
+          (!ndcCandidates || ndcCandidates.length === 0) &&
+          input.data.drugOrNdc
+        ) {
+          const ndcPattern = /^\d{4,5}-?\d{3,4}-?\d{1,2}$/;
+          if (ndcPattern.test(input.data.drugOrNdc.replace(/\s/g, ""))) {
+            const candidates = await searchFdaNdc({
+              ndc: input.data.drugOrNdc,
+            });
+            if (candidates.length > 0) {
+              ndcCandidates = candidates;
+              console.log(
+                `[Loader] Found ${candidates.length} NDC candidates from direct NDC search (lazy load)`,
+              );
+            }
+          }
+        }
+
+        // If still no candidates, try searching by product name
+        if (
+          (!ndcCandidates || ndcCandidates.length === 0) &&
+          input.data.drugOrNdc
+        ) {
+          const candidates = await searchFdaNdc({
+            productName: input.data.drugOrNdc,
+          });
+          if (candidates.length > 0) {
+            ndcCandidates = candidates;
+            console.log(
+              `[Loader] Found ${candidates.length} NDC candidates from product name search (lazy load)`,
+            );
+          }
+        }
+
+        // Add warning if no NDCs found
+        if (!ndcCandidates || ndcCandidates.length === 0) {
+          const hasMissingNdcWarning = existingWarnings.some(
+            (w) => w.type === "missing_ndc",
+          );
+          if (!hasMissingNdcWarning) {
+            newWarnings.push({
+              type: "missing_ndc",
+              severity: "warning",
+              message: `No NDC candidates found for "${input.data.drugOrNdc}". The calculation may be incomplete.`,
+              field: "drugOrNdc",
+            });
+          }
+        }
+
+        // Select optimal NDC using deterministic logic if candidates exist and no selection yet
+        let selectedNdc: NdcCandidate | null = calculation.selectedNdcJson
+          ? (calculation.selectedNdcJson as NdcCandidate)
+          : null;
+
+        if (!selectedNdc && ndcCandidates && ndcCandidates.length > 0) {
+          console.log(
+            `[Loader] Selecting optimal NDC from ${ndcCandidates.length} candidates (lazy load)`,
+          );
+          selectedNdc = selectOptimalNdc(
+            ndcCandidates,
+            normalized,
+            input.data.daysSupply,
+          );
+          if (selectedNdc) {
+            console.log(
+              `[Loader] Selected NDC: ${selectedNdc.ndc} (${selectedNdc.productName})`,
+            );
+          }
+        }
+
+        // Update calculation in database
+        await db
+          .update(calculations)
+          .set({
+            ndcCandidatesJson:
+              ndcCandidates && ndcCandidates.length > 0 ? ndcCandidates : null,
+            selectedNdcJson: selectedNdc,
+            warningsJson: newWarnings.length > 0 ? newWarnings : null,
+          })
+          .where(eq(calculations.id, id));
+
+        // Return updated calculation
+        return {
+          ...calculation,
+          ndcCandidatesJson:
+            ndcCandidates && ndcCandidates.length > 0 ? ndcCandidates : null,
+          selectedNdcJson: selectedNdc,
+          warningsJson: newWarnings.length > 0 ? newWarnings : null,
+        } as Calculation;
+      } catch (error) {
+        console.error("[Loader] FDA NDC search failed (lazy load):", error);
+        const hasErrorWarning = existingWarnings.some(
+          (w) =>
+            w.type === "other" &&
+            w.message.includes("Failed to fetch NDC candidates"),
+        );
+        if (!hasErrorWarning) {
+          newWarnings.push({
+            type: "other",
+            severity: "warning",
+            message:
+              "Failed to fetch NDC candidates from FDA. The calculation may be incomplete.",
+            field: "drugOrNdc",
+          });
+        }
+
+        await db
+          .update(calculations)
+          .set({
+            warningsJson: newWarnings.length > 0 ? newWarnings : null,
+          })
+          .where(eq(calculations.id, id));
+
+        return {
+          ...calculation,
+          warningsJson: newWarnings.length > 0 ? newWarnings : null,
+        } as Calculation;
+      }
+    }
+  }
+
   // Apply AI ranking if candidates exist and AI notes are not already set
   const candidatesArray = Array.isArray(calculation.ndcCandidatesJson)
     ? (calculation.ndcCandidatesJson as NdcCandidate[])
@@ -348,9 +721,8 @@ export async function getCalculationById(
         if (aiResult) {
           // Update candidates with ranked scores
           const updatedCandidates = aiResult.rankedCandidates;
-          let updatedSelectedNdc = calculation.selectedNdcJson as
-            | NdcCandidate
-            | null;
+          let updatedSelectedNdc =
+            calculation.selectedNdcJson as NdcCandidate | null;
 
           // Set selectedNdcJson to top-ranked candidate if not already set
           if (!updatedSelectedNdc && aiResult.topCandidate) {
@@ -417,13 +789,7 @@ export type HistoryResult = {
 export async function getHistory(
   params: HistoryQueryParams = {},
 ): Promise<HistoryResult> {
-  const {
-    page = 1,
-    pageSize = 20,
-    search,
-    fromDate,
-    toDate,
-  } = params;
+  const { page = 1, pageSize = 20, search, fromDate, toDate } = params;
 
   // Get session if auth is enabled
   const session = await auth();

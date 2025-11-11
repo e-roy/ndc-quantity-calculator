@@ -55,6 +55,93 @@ function normalizeUnit(unit: string): string {
 }
 
 /**
+ * Converts liquid volume units to milliliters.
+ * Handles teaspoons, tablespoons, fluid ounces, etc.
+ *
+ * @param value - Value to convert
+ * @param fromUnit - Source unit
+ * @returns Converted value in milliliters, or original value if conversion not needed/possible
+ */
+function convertToMilliliters(value: number, fromUnit: string): number {
+  const normalizedUnit = normalizeUnit(fromUnit);
+  
+  // Conversion factors to milliliters
+  const conversions: Record<string, number> = {
+    teaspoon: 5,
+    tsp: 5,
+    tablespoon: 15,
+    tbsp: 15,
+    cup: 240,
+    oz: 30, // fluid ounce
+    ounce: 30,
+    "fl oz": 30,
+    "fluid ounce": 30,
+    ml: 1,
+    milliliter: 1,
+    l: 1000,
+    liter: 1000,
+  };
+
+  const factor = conversions[normalizedUnit];
+  if (factor) {
+    return value * factor;
+  }
+
+  // No conversion needed or unit not recognized
+  return value;
+}
+
+/**
+ * Handles special dosage form calculations.
+ * For insulin: units are already correct, no conversion needed.
+ * For inhalers: puffs/sprays are counted, no conversion needed.
+ * For liquids: may need unit conversion (teaspoon to ml, etc.).
+ *
+ * @param dose - Dose value
+ * @param doseUnit - Dose unit
+ * @param dosageForm - Detected dosage form
+ * @returns Converted dose and unit (if conversion applied)
+ */
+function handleSpecialDosageForm(
+  dose: number,
+  doseUnit: string,
+  dosageForm: "liquid" | "insulin" | "inhaler" | undefined,
+): { dose: number; doseUnit: string } {
+  if (!dosageForm) {
+    return { dose, doseUnit };
+  }
+
+  // Insulin: units are already correct, no conversion
+  if (dosageForm === "insulin") {
+    return { dose, doseUnit: "unit" };
+  }
+
+  // Inhaler: puffs/sprays are already correct, no conversion
+  if (dosageForm === "inhaler") {
+    const normalized = normalizeUnit(doseUnit);
+    if (normalized === "puff" || normalized === "spray") {
+      return { dose, doseUnit: normalized };
+    }
+    return { dose, doseUnit };
+  }
+
+  // Liquid: convert to milliliters if needed
+  if (dosageForm === "liquid") {
+    const normalized = normalizeUnit(doseUnit);
+    // If already in ml or l, no conversion needed
+    if (normalized === "ml" || normalized === "l") {
+      return { dose, doseUnit: normalized };
+    }
+    
+    // Convert to ml
+    const convertedDose = convertToMilliliters(dose, doseUnit);
+    return { dose: convertedDose, doseUnit: "ml" };
+  }
+
+  return { dose, doseUnit };
+}
+
+/**
  * Result of quantity calculation.
  */
 export type QuantityResult = {
@@ -101,11 +188,18 @@ export function calculateQuantity(
     return null;
   }
 
+  // Handle special dosage forms (unit conversion if needed)
+  const { dose: adjustedDose, doseUnit: adjustedDoseUnit } = handleSpecialDosageForm(
+    dose,
+    doseUnit,
+    normalizedSig.dosageForm,
+  );
+
   // Calculate quantity
-  const quantityValue = dose * frequencyPerDay * daysSupply;
+  const quantityValue = adjustedDose * frequencyPerDay * daysSupply;
 
   // Normalize unit to singular form
-  const quantityUnit = normalizeUnit(doseUnit);
+  const quantityUnit = normalizeUnit(adjustedDoseUnit);
 
   return {
     quantityValue,
@@ -236,13 +330,63 @@ export function detectOverfillUnderfill(
 }
 
 /**
+ * Multi-pack calculation result.
+ */
+export type MultiPackResult = {
+  packageCount: number; // Number of full packages needed
+  remainder: number; // Remaining units after full packages
+  isMultiPack: boolean; // True if more than one package is needed
+} | null;
+
+/**
+ * Calculates multi-pack information from quantity and package size.
+ *
+ * @param quantityValue - Calculated quantity value
+ * @param quantityUnit - Calculated quantity unit
+ * @param packageSize - Package size information
+ * @returns Multi-pack result or null if units don't match or package size unavailable
+ */
+export function calculateMultiPack(
+  quantityValue: number,
+  quantityUnit: string,
+  packageSize: PackageSize,
+): MultiPackResult {
+  if (!packageSize) {
+    return null;
+  }
+
+  // Check if units match
+  const normalizedQuantityUnit = normalizeUnit(quantityUnit);
+  const normalizedPackageUnit = normalizeUnit(packageSize.packageUnit);
+
+  if (normalizedQuantityUnit !== normalizedPackageUnit) {
+    return null; // Units don't match
+  }
+
+  const packageSizeValue = packageSize.packageSize;
+  if (packageSizeValue <= 0) {
+    return null;
+  }
+
+  // Calculate number of full packages needed
+  const packageCount = Math.floor(quantityValue / packageSizeValue);
+  const remainder = quantityValue % packageSizeValue;
+
+  return {
+    packageCount,
+    remainder,
+    isMultiPack: packageCount >= 1, // True if at least one package is needed
+  };
+}
+
+/**
  * Computes quantity and detects overfill/underfill warnings.
  * Convenience function that combines calculation, package parsing, and warning detection.
  *
  * @param normalizedSig - Normalized SIG
  * @param daysSupply - Days supply
  * @param selectedNdc - Selected NDC candidate (optional, for package size comparison)
- * @returns Object with quantity result, package size, and warnings
+ * @returns Object with quantity result, package size, multi-pack info, and warnings
  */
 export function computeQuantityWithWarnings(
   normalizedSig: NormalizedSig | null,
@@ -251,6 +395,7 @@ export function computeQuantityWithWarnings(
 ): {
   quantity: QuantityResult;
   packageSize: PackageSize;
+  multiPack: MultiPackResult;
   warnings: Warning[];
 } {
   // Calculate quantity
@@ -259,6 +404,11 @@ export function computeQuantityWithWarnings(
   // Parse package size if NDC is available
   const packageSize = selectedNdc
     ? parsePackageSize(selectedNdc.packageDescription)
+    : null;
+
+  // Calculate multi-pack information
+  const multiPack = quantity && packageSize
+    ? calculateMultiPack(quantity.quantityValue, quantity.quantityUnit, packageSize)
     : null;
 
   // Detect overfill/underfill if we have both quantity and package size
@@ -270,11 +420,28 @@ export function computeQuantityWithWarnings(
       packageSize,
     );
     warnings.push(...overfillUnderfillWarnings);
+
+    // Add multi-pack warning if multiple packages are needed
+    if (multiPack && multiPack.packageCount > 1) {
+      warnings.push({
+        type: "other",
+        severity: "info",
+        message: `Multiple packages required: ${multiPack.packageCount} package${multiPack.packageCount > 1 ? "s" : ""} of ${packageSize.packageSize} ${packageSize.packageUnit}${multiPack.remainder > 0 ? ` plus ${multiPack.remainder.toFixed(1)} ${quantity.quantityUnit}` : ""}.`,
+        field: "quantity",
+        details: {
+          packageCount: multiPack.packageCount,
+          remainder: multiPack.remainder,
+          totalQuantity: quantity.quantityValue,
+          packageSize: packageSize.packageSize,
+        },
+      });
+    }
   }
 
   return {
     quantity,
     packageSize,
+    multiPack,
     warnings,
   };
 }

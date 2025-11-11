@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Info } from "lucide-react";
 import type { NormalizedSig, NdcCandidate, Warning } from "../../types";
-import { parsePackageSize } from "../../utils/quantityMath";
+import { parsePackageSize, calculateMultiPack, type MultiPackResult } from "../../utils/quantityMath";
 
 type QuantityPanelProps = {
   quantityValue: string | null;
@@ -35,6 +35,15 @@ export function QuantityPanel({
   // Parse package size if available
   const packageSize = selectedNdc
     ? parsePackageSize(selectedNdc.packageDescription)
+    : null;
+
+  // Calculate multi-pack information
+  const multiPack: MultiPackResult = quantityValue && quantityUnit && packageSize
+    ? calculateMultiPack(
+        Number.parseFloat(quantityValue),
+        quantityUnit,
+        packageSize,
+      )
     : null;
 
   // Check if calculation is complete
@@ -138,6 +147,41 @@ export function QuantityPanel({
                 </span>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Multi-pack information */}
+        {multiPack && multiPack.packageCount > 0 && (
+          <div className="space-y-2 rounded-lg border bg-primary/5 p-4">
+            <p className="text-muted-foreground text-xs font-medium">
+              Packages Required
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-lg font-semibold">
+                {multiPack.packageCount}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                package{multiPack.packageCount > 1 ? "s" : ""}
+              </span>
+              {multiPack.remainder > 0 && (
+                <>
+                  <span className="text-muted-foreground">+</span>
+                  <span className="text-sm font-medium">
+                    {multiPack.remainder.toFixed(1).replace(/\.0$/, "")}
+                  </span>
+                  {quantityUnit && (
+                    <Badge variant="outline" className="text-xs">
+                      {quantityUnit}
+                    </Badge>
+                  )}
+                </>
+              )}
+            </div>
+            {multiPack.packageCount > 1 && (
+              <p className="text-muted-foreground text-xs">
+                Total: {displayQuantity} {quantityUnit}
+              </p>
+            )}
           </div>
         )}
 

@@ -19,7 +19,8 @@ export const NormalizedSigSchema = z.object({
   rxcui: z.string().optional(), // RxNorm concept ID
   name: z.string().optional(), // Resolved medication name from RxNorm
   strength: z.string().optional(), // Medication strength (e.g., "10mg", "5mg/5ml")
-  form: z.string().optional(), // Dosage form (e.g., "TABLET", "CAPSULE", "SOLUTION")
+  form: z.string().optional(), // Dosage form from RxNorm (e.g., "TABLET", "CAPSULE", "SOLUTION")
+  dosageForm: z.enum(["liquid", "insulin", "inhaler"]).optional(), // Detected special dosage form from SIG
   dose: z.number().optional(), // Numeric dose value (e.g., 1, 2, 10)
   doseUnit: z.string().optional(), // Unit of dose (e.g., "tablet", "ml", "mg", "capsule")
   frequencyPerDay: z.number().optional(), // Frequency per day (e.g., 1, 2, 3, 4)
