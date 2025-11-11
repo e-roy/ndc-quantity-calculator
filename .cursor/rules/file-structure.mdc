@@ -104,6 +104,15 @@ public/
 - Accessibility: label inputs; keyboard-focus visible; aria on tabs and toasts.
 - Tailwind 4 utilities; keep variant logic in CVA where needed.
 
+## ESLint Best Practices
+
+- **Floating promises**: Always `await` promises or explicitly mark with `void` if intentionally fire-and-forget (e.g., `void form.trigger()`).
+- **Unused variables**: Remove unused imports/variables. For params that will be used later, use `await params` without destructuring or prefix with `_` (e.g., `_unusedParam`).
+- **Unescaped entities**: Use HTML entities (`&quot;`, `&apos;`) or proper quote characters in JSX text content instead of raw quotes.
+- **Type imports**: Use `import type` for type-only imports to improve tree-shaking and clarity.
+- **Nullish coalescing**: Prefer `??` over `||` for default values when you want to exclude `null`/`undefined` but allow falsy values like `0` or `""`.
+- **Consistent patterns**: Follow existing code patterns; don't modify generated shadcn/ui components unless necessary.
+
 ## DB & Migrations
 
 - Use drizzle-kit via scripts: `db:generate`, `db:migrate`, `db:push`, `db:studio`.

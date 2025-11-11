@@ -4,8 +4,6 @@ import { type Metadata } from "next";
 import { Geist } from "next/font/google";
 
 import { TRPCReactProvider } from "@/trpc/react";
-import { MarketingHeader } from "@/components/layout/MarketingHeader";
-import { AppHeader } from "@/components/layout/AppHeader";
 import { HeaderSelector } from "@/components/layout/HeaderSelector";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Footer } from "@/components/layout/Footer";
