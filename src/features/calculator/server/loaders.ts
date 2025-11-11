@@ -10,6 +10,7 @@ import { CalculatorInputSchema } from "./schema";
 import { parseSig, getPartialParseWarning } from "../utils/sigParser";
 import { resolveToRxcui } from "./services/rxnorm";
 import { computeQuantityWithWarnings } from "../utils/quantityMath";
+import { rankNdcCandidates } from "./services/aiAssist";
 import { auth } from "@/server/auth";
 import type {
   Calculation,
@@ -317,6 +318,69 @@ export async function getCalculationById(
           warningsJson: newWarnings.length > 0 ? newWarnings : null,
         } as Calculation;
       }
+    }
+  }
+
+  // Apply AI ranking if candidates exist and AI notes are not already set
+  const candidatesArray = Array.isArray(calculation.ndcCandidatesJson)
+    ? (calculation.ndcCandidatesJson as NdcCandidate[])
+    : null;
+
+  if (
+    candidatesArray &&
+    candidatesArray.length > 0 &&
+    !calculation.aiNotes &&
+    calculation.inputJson
+  ) {
+    try {
+      const input = CalculatorInputSchema.safeParse(calculation.inputJson);
+      if (input.success) {
+        const normalized = calculation.normalizedJson as NormalizedSig | null;
+        const candidates = candidatesArray;
+
+        // Call AI ranking (non-blocking, wrapped in try-catch)
+        const aiResult = await rankNdcCandidates(
+          candidates,
+          normalized,
+          input.data,
+        );
+
+        if (aiResult) {
+          // Update candidates with ranked scores
+          const updatedCandidates = aiResult.rankedCandidates;
+          let updatedSelectedNdc = calculation.selectedNdcJson as
+            | NdcCandidate
+            | null;
+
+          // Set selectedNdcJson to top-ranked candidate if not already set
+          if (!updatedSelectedNdc && aiResult.topCandidate) {
+            updatedSelectedNdc = aiResult.topCandidate;
+          }
+
+          // Update calculation in database
+          await db
+            .update(calculations)
+            .set({
+              ndcCandidatesJson: updatedCandidates,
+              aiNotes: aiResult.rationale,
+              ...(updatedSelectedNdc && {
+                selectedNdcJson: updatedSelectedNdc,
+              }),
+            })
+            .where(eq(calculations.id, id));
+
+          // Return updated calculation
+          return {
+            ...calculation,
+            ndcCandidatesJson: updatedCandidates,
+            aiNotes: aiResult.rationale,
+            selectedNdcJson: updatedSelectedNdc ?? calculation.selectedNdcJson,
+          } as Calculation;
+        }
+      }
+    } catch (error) {
+      // Silently fallback - log but don't throw
+      console.log("[Loader] AI ranking failed:", error);
     }
   }
 

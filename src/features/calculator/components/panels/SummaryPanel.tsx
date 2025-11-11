@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AlertTriangle, Info, Download } from "lucide-react";
+import { AlertTriangle, Info, Download, Sparkles } from "lucide-react";
 import { exportCalculation } from "../../server/actions";
 import type { NormalizedSig, NdcCandidate } from "../../types";
 import { isSigComplete } from "../../utils/sigParser";
@@ -22,6 +23,8 @@ type SummaryPanelProps = {
   originalSig?: string;
   drugOrNdc?: string;
   selectedNdc?: NdcCandidate | null;
+  aiNotes?: string | null;
+  ndcCandidates?: NdcCandidate[] | null;
 };
 
 /**
@@ -52,12 +55,24 @@ export function SummaryPanel({
   originalSig,
   drugOrNdc,
   selectedNdc,
+  aiNotes,
+  ndcCandidates,
 }: SummaryPanelProps) {
+  const router = useRouter();
   const [isExporting, setIsExporting] = useState(false);
   const isComplete = normalizedSig ? isSigComplete(normalizedSig) : false;
   const hasPartialData = normalizedSig && !isComplete;
   const medicationName =
     normalizedSig?.name ?? drugOrNdc ?? "Unknown medication";
+  const hasAiSuggestion = !!aiNotes && !!selectedNdc;
+  const hasAlternatives = ndcCandidates && ndcCandidates.length > 1;
+
+  const handleViewAlternatives = () => {
+    // Navigate to NDC tab by updating URL
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "ndc");
+    router.push(url.pathname + url.search);
+  };
 
   const handleExportJson = async () => {
     setIsExporting(true);
@@ -153,13 +168,21 @@ export function SummaryPanel({
           </div>
         )}
 
-        {/* Selected NDC */}
+        {/* Suggested/Selected NDC */}
         {selectedNdc && (
           <div className="space-y-2 rounded-lg border bg-muted/50 p-4">
-            <p className="text-muted-foreground text-sm font-medium">
-              Selected NDC
-            </p>
-            <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <p className="text-muted-foreground text-sm font-medium">
+                {hasAiSuggestion ? "Suggested NDC" : "Selected NDC"}
+              </p>
+              {hasAiSuggestion && (
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <Sparkles className="size-3" />
+                  AI-aided
+                </Badge>
+              )}
+            </div>
+            <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <p className="font-mono text-sm font-medium">{selectedNdc.ndc}</p>
                 {selectedNdc.active ? (
@@ -178,6 +201,24 @@ export function SummaryPanel({
                 )}
               </div>
               <p className="text-sm">{selectedNdc.productName}</p>
+              {hasAiSuggestion && aiNotes && (
+                <div className="space-y-1">
+                  <p className="text-muted-foreground text-xs font-medium">
+                    Rationale
+                  </p>
+                  <p className="text-xs italic">{aiNotes}</p>
+                </div>
+              )}
+              {hasAiSuggestion && hasAlternatives && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleViewAlternatives}
+                  className="mt-2 w-full sm:w-auto"
+                >
+                  View alternatives ({ndcCandidates?.length ?? 0})
+                </Button>
+              )}
             </div>
           </div>
         )}

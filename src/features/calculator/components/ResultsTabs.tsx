@@ -71,6 +71,8 @@ export function ResultsTabs({
           originalSig={originalSig}
           drugOrNdc={drugOrNdc}
           selectedNdc={selectedNdc}
+          aiNotes={calculation.aiNotes}
+          ndcCandidates={ndcCandidates}
         />
       </TabsContent>
 
