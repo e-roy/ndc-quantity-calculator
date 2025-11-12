@@ -1,12 +1,11 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { AppHeaderNav } from "./AppHeaderNav";
+import { logoutAction } from "@/server/actions/auth";
 
 export function AppHeader() {
-  const pathname = usePathname();
+  // Calculator routes are protected by middleware, so if we're here, user is authenticated
+  // Always show Logout since this header is only used on calculator routes
 
   return (
     <header className="bg-background/95 supports-backdrop-filter:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur">
@@ -16,31 +15,12 @@ export function AppHeader() {
         </Link>
 
         <nav className="flex items-center gap-6">
-          <Link
-            href="/calculator"
-            className={cn(
-              "hover:text-foreground text-sm font-medium transition-colors",
-              pathname === "/calculator"
-                ? "text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            Calculator
-          </Link>
-          <Link
-            href="/calculator/history"
-            className={cn(
-              "hover:text-foreground text-sm font-medium transition-colors",
-              pathname?.startsWith("/calculator/history")
-                ? "text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            History
-          </Link>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">Login</Link>
-          </Button>
+          <AppHeaderNav />
+          <form action={logoutAction}>
+            <Button type="submit" variant="ghost" size="sm">
+              Logout
+            </Button>
+          </form>
         </nav>
       </div>
     </header>

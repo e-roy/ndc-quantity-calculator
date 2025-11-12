@@ -1,16 +1,16 @@
-import { signIn } from "@/server/auth";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
+import { signIn } from "@/server/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { type JSX, type SVGProps } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { loginAction } from "@/server/actions/auth";
+import { signupAction } from "@/server/actions/auth";
 import Link from "next/link";
 
-type SearchParams = Promise<{ error?: string; callbackUrl?: string }>;
+type SearchParams = Promise<{ error?: string }>;
 
 const GoogleIcon = (
   props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>,
@@ -20,7 +20,7 @@ const GoogleIcon = (
   </svg>
 );
 
-export default async function Login02({
+export default async function SignupPage({
   searchParams,
 }: {
   searchParams: SearchParams;
@@ -28,31 +28,20 @@ export default async function Login02({
   const session = await auth();
   const params = await searchParams;
   const error = params?.error;
-  const callbackUrl = params?.callbackUrl?.toString() ?? "/calculator";
 
   // Redirect if already logged in
   if (session) {
-    redirect(callbackUrl);
+    redirect("/calculator");
   }
 
-  async function handleLogin(formData: FormData) {
+  async function handleSignup(formData: FormData) {
     "use server";
-    // Add callbackUrl to form data
-    formData.append("callbackUrl", callbackUrl);
-    try {
-      const result = await loginAction(formData);
-      // If we get here, login failed (success would have redirected)
-      if (!result.success) {
-        redirect(
-          `/login?error=${encodeURIComponent(result.error)}&callbackUrl=${encodeURIComponent(callbackUrl)}`,
-        );
-      }
-    } catch (err) {
-      // loginAction may redirect (which throws), that's expected
-      // Re-throw to let Next.js handle the redirect
-      throw err;
+    const result = await signupAction(formData);
+    if (!result.success) {
+      redirect(`/signup?error=${encodeURIComponent(result.error)}`);
     }
   }
+
   return (
     <div className="bg-background flex min-h-screen items-center justify-center">
       <div className="flex flex-1 flex-col justify-center px-4 py-10 lg:px-6">
@@ -60,50 +49,101 @@ export default async function Login02({
           <CardContent>
             <div className="sm:mx-auto sm:w-full sm:max-w-sm">
               <h2 className="text-foreground text-center text-xl font-semibold">
-                Log in or create account
+                Create an account
               </h2>
               {error && (
                 <div className="bg-destructive/15 text-destructive mt-4 rounded-md p-3 text-sm">
                   {error}
                 </div>
               )}
-              <form action={handleLogin} className="mt-6 space-y-4">
+              <form action={handleSignup} className="mt-6 space-y-4">
                 <div>
                   <Label
-                    htmlFor="username-login-02"
+                    htmlFor="name-signup"
                     className="text-foreground dark:text-foreground text-sm font-medium"
                   >
-                    Username or Email
+                    Name (Optional)
                   </Label>
                   <Input
                     type="text"
-                    id="username-login-02"
-                    name="username"
-                    autoComplete="username"
-                    placeholder="username or email@example.com"
+                    id="name-signup"
+                    name="name"
+                    autoComplete="name"
+                    placeholder="Your name"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label
+                    htmlFor="email-signup"
+                    className="text-foreground dark:text-foreground text-sm font-medium"
+                  >
+                    Email
+                  </Label>
+                  <Input
+                    type="email"
+                    id="email-signup"
+                    name="email"
+                    autoComplete="email"
+                    placeholder="email@example.com"
                     className="mt-2"
                     required
                   />
                 </div>
                 <div>
                   <Label
-                    htmlFor="password-login-02"
+                    htmlFor="username-signup"
+                    className="text-foreground dark:text-foreground text-sm font-medium"
+                  >
+                    Username (Optional)
+                  </Label>
+                  <Input
+                    type="text"
+                    id="username-signup"
+                    name="username"
+                    autoComplete="username"
+                    placeholder="username"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label
+                    htmlFor="password-signup"
                     className="text-foreground dark:text-foreground text-sm font-medium"
                   >
                     Password
                   </Label>
                   <Input
                     type="password"
-                    id="password-login-02"
+                    id="password-signup"
                     name="password"
-                    autoComplete="current-password"
+                    autoComplete="new-password"
                     placeholder="**************"
                     className="mt-2"
                     required
+                    minLength={8}
+                  />
+                </div>
+                <div>
+                  <Label
+                    htmlFor="confirmPassword-signup"
+                    className="text-foreground dark:text-foreground text-sm font-medium"
+                  >
+                    Confirm Password
+                  </Label>
+                  <Input
+                    type="password"
+                    id="confirmPassword-signup"
+                    name="confirmPassword"
+                    autoComplete="new-password"
+                    placeholder="**************"
+                    className="mt-2"
+                    required
+                    minLength={8}
                   />
                 </div>
                 <Button type="submit" className="mt-4 w-full py-2 font-medium">
-                  Sign in
+                  Sign up
                 </Button>
               </form>
 
@@ -121,7 +161,7 @@ export default async function Login02({
               <form
                 action={async () => {
                   "use server";
-                  await signIn("google", { redirectTo: callbackUrl });
+                  await signIn("google", { redirectTo: "/calculator" });
                 }}
               >
                 <Button
@@ -131,13 +171,13 @@ export default async function Login02({
                 >
                   <GoogleIcon className="size-5" aria-hidden={true} />
                   <span className="text-sm font-medium">
-                    Sign in with Google
+                    Sign up with Google
                   </span>
                 </Button>
               </form>
 
               <p className="text-muted-foreground dark:text-muted-foreground mt-4 text-xs">
-                By signing in, you agree to our{" "}
+                By signing up, you agree to our{" "}
                 <a href="#" className="underline underline-offset-4">
                   terms of service
                 </a>{" "}
@@ -149,12 +189,12 @@ export default async function Login02({
               </p>
 
               <p className="text-muted-foreground dark:text-muted-foreground mt-6 text-center text-sm">
-                Don&apos;t have an account?{" "}
+                Already have an account?{" "}
                 <Link
-                  href="/signup"
+                  href="/login"
                   className="text-primary hover:text-primary/90 dark:text-primary hover:dark:text-primary/90 font-medium"
                 >
-                  Sign up
+                  Sign in
                 </Link>
               </p>
             </div>
@@ -164,3 +204,4 @@ export default async function Login02({
     </div>
   );
 }
+

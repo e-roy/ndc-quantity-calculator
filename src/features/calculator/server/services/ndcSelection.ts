@@ -35,7 +35,10 @@ function normalizeUnitForMatch(unit: string | undefined): string {
  * Compares two units for similarity.
  * Returns 1 if exact match, 0.5 if similar (e.g., tablet/tab), 0 if no match.
  */
-function compareUnits(unit1: string | undefined, unit2: string | undefined): number {
+function compareUnits(
+  unit1: string | undefined,
+  unit2: string | undefined,
+): number {
   if (!unit1 || !unit2) {
     return 0;
   }
@@ -195,7 +198,10 @@ export function scoreNdcCandidate(
 
   // Compare strength if available
   if (normalizedSig?.strength && candidate.strength) {
-    breakdown.strengthMatch = compareStrengths(normalizedSig.strength, candidate.strength);
+    breakdown.strengthMatch = compareStrengths(
+      normalizedSig.strength,
+      candidate.strength,
+    );
   } else if (!normalizedSig?.strength && !candidate.strength) {
     // Both missing - neutral
     breakdown.strengthMatch = 0.5;
@@ -270,7 +276,11 @@ export function selectOptimalNdc(
   }
 
   // Remove score and scoreBreakdown before returning (not part of NdcCandidate type)
-  const { score: _score, scoreBreakdown: _scoreBreakdown, ...candidate } = topCandidate;
+  const {
+    score: _score,
+    scoreBreakdown: _scoreBreakdown,
+    ...candidate
+  } = topCandidate;
   return candidate;
 }
 
@@ -310,6 +320,8 @@ export function rankNdcCandidates(
   });
 
   // Return candidates without score breakdown
-  return scoredCandidates.map(({ score: _score, scoreBreakdown: _scoreBreakdown, ...candidate }) => candidate);
+  return scoredCandidates.map(
+    ({ score: _score, scoreBreakdown: _scoreBreakdown, ...candidate }) =>
+      candidate,
+  );
 }
-

@@ -20,12 +20,14 @@ export default async function HistoryPage({ searchParams }: Props) {
 
   // Parse date filters
   const fromDate = params.fromDate
-    ? (isNaN(Date.parse(params.fromDate))
-        ? undefined
-        : new Date(params.fromDate))
+    ? isNaN(Date.parse(params.fromDate))
+      ? undefined
+      : new Date(params.fromDate)
     : undefined;
   const toDate = params.toDate
-    ? (isNaN(Date.parse(params.toDate)) ? undefined : new Date(params.toDate))
+    ? isNaN(Date.parse(params.toDate))
+      ? undefined
+      : new Date(params.toDate)
     : undefined;
 
   // Fetch history

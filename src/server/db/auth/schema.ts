@@ -15,6 +15,8 @@ export const users = createAuthTable("user", (d) => ({
     .$defaultFn(() => crypto.randomUUID()),
   name: d.varchar({ length: 255 }),
   email: d.varchar({ length: 255 }).notNull(),
+  username: d.varchar({ length: 255 }),
+  password: d.varchar({ length: 255 }),
   emailVerified: d
     .timestamp({
       mode: "date",
