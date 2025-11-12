@@ -7,6 +7,8 @@ import { env } from "@/env";
 import * as schema from "./schema";
 import * as authSchema from "./auth/schema";
 import * as calculatorSchema from "./calculator/schema";
+import * as metricsSchema from "./metrics/schema";
+import * as complianceSchema from "./compliance/schema";
 
 /**
  * Cache the database connection in development. This avoids creating a new connection on every HMR
@@ -20,5 +22,5 @@ const conn = globalForDb.conn ?? postgres(env.DATABASE_URL);
 if (env.NODE_ENV !== "production") globalForDb.conn = conn;
 
 export const db = drizzle(conn, {
-  schema: { ...schema, ...authSchema, ...calculatorSchema },
+  schema: { ...schema, ...authSchema, ...calculatorSchema, ...metricsSchema, ...complianceSchema },
 });

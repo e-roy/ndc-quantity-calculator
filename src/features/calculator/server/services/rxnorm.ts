@@ -3,6 +3,8 @@
  * Uses the RxNorm REST API to normalize medication names.
  */
 
+import { withPerformanceLogging } from "@/lib/telemetry";
+
 const RXNORM_BASE_URL = "https://rxnav.nlm.nih.gov";
 
 export type RxNormResult = {
@@ -27,21 +29,27 @@ export async function resolveToRxcui(drugOrNdc: string): Promise<RxNormResult> {
 
   const term = drugOrNdc.trim();
 
-  try {
-    // First, try exact match via rxcui endpoint
-    const exactMatch = await tryExactMatch(term);
-    if (exactMatch) {
-      return exactMatch;
-    }
+  return withPerformanceLogging(
+    "rxnorm.resolve",
+    async () => {
+      try {
+        // First, try exact match via rxcui endpoint
+        const exactMatch = await tryExactMatch(term);
+        if (exactMatch) {
+          return exactMatch;
+        }
 
-    // Fallback to approximate term matching
-    const approximateMatch = await tryApproximateMatch(term);
-    return approximateMatch;
-  } catch (error) {
-    // Log error but don't throw - return null values gracefully
-    console.error("[RxNorm] API error for term:", term, error);
-    return { rxcui: null, name: null };
-  }
+        // Fallback to approximate term matching
+        const approximateMatch = await tryApproximateMatch(term);
+        return approximateMatch;
+      } catch (error) {
+        // Log error but don't throw - return null values gracefully
+        console.error("[RxNorm] API error for term:", term, error);
+        return { rxcui: null, name: null };
+      }
+    },
+    { term, drugOrNdc },
+  );
 }
 
 /**

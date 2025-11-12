@@ -17,6 +17,7 @@ import { exportCalculation } from "../../server/actions";
 import type { NormalizedSig, NdcCandidate } from "../../types";
 import { isSigComplete } from "../../utils/sigParser";
 import { parsePackageSize, calculateMultiPack, type MultiPackResult } from "../../utils/quantityMath";
+import { FeedbackForm } from "../FeedbackForm";
 
 type SummaryPanelProps = {
   calculationId: string;
@@ -129,6 +130,7 @@ export function SummaryPanel({
   };
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -400,5 +402,9 @@ export function SummaryPanel({
         )}
       </CardContent>
     </Card>
+
+    {/* Feedback Form */}
+    <FeedbackForm calculationId={calculationId} />
+  </>
   );
 }

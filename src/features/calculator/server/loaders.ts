@@ -14,6 +14,9 @@ import { selectOptimalNdc } from "./services/ndcSelection";
 import { computeQuantityWithWarnings } from "../utils/quantityMath";
 import { rankNdcCandidates } from "./services/aiAssist";
 import { auth } from "@/server/auth";
+import { withPerformanceLogging, logPerformance } from "@/lib/telemetry";
+import { trackCalculation } from "@/lib/analytics";
+import { logAccess } from "@/lib/audit";
 import type {
   Calculation,
   Warning,
@@ -28,6 +31,10 @@ import type {
 export async function getCalculationById(
   id: string,
 ): Promise<Calculation | null> {
+  // Get user ID from session for audit logging
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
   // Fetch calculation from database
   const [calculation] = await db
     .select()
@@ -39,13 +46,27 @@ export async function getCalculationById(
     return null;
   }
 
+  // Log access to calculation (non-blocking)
+  void logAccess("calculation", id, userId, {
+    calculationStatus: calculation.status,
+  }).catch((error) => {
+    console.error("[Loader] Failed to log access:", error);
+  });
+
   // If normalizedJson is empty/null, compute it from inputJson
   if (!calculation.normalizedJson && calculation.inputJson) {
+    const calculationStart = Date.now();
+    let normalizationDuration = 0;
+    let ndcLookupDuration = 0;
+    let quantityCalculationDuration = 0;
+
     // Parse inputJson to get SIG
     const input = CalculatorInputSchema.safeParse(calculation.inputJson);
     if (input.success && input.data.sig) {
       // Parse the SIG
+      const sigParseStart = Date.now();
       const normalized = parseSig(input.data.sig);
+      normalizationDuration = Date.now() - sigParseStart;
 
       // Get existing warnings or initialize empty array
       const existingWarnings: Warning[] = calculation.warningsJson
@@ -115,6 +136,7 @@ export async function getCalculationById(
         : null;
 
       if (!ndcCandidates || ndcCandidates.length === 0) {
+        const ndcLookupStart = Date.now();
         try {
           console.log(
             `[Loader] Fetching NDC candidates for: "${input.data.drugOrNdc}"`,
@@ -189,6 +211,8 @@ export async function getCalculationById(
               "Failed to fetch NDC candidates from FDA. The calculation may be incomplete.",
             field: "drugOrNdc",
           });
+        } finally {
+          ndcLookupDuration = Date.now() - ndcLookupStart;
         }
       }
 
@@ -218,11 +242,13 @@ export async function getCalculationById(
       let quantityUnit: string | null = calculation.quantityUnit;
 
       if (!quantityValue && input.data.daysSupply) {
+        const quantityCalcStart = Date.now();
         const quantityResult = computeQuantityWithWarnings(
           normalized,
           input.data.daysSupply,
           selectedNdc,
         );
+        quantityCalculationDuration = Date.now() - quantityCalcStart;
 
         if (quantityResult.quantity) {
           quantityValue = quantityResult.quantity.quantityValue.toString();
@@ -246,8 +272,20 @@ export async function getCalculationById(
         })
         .where(eq(calculations.id, id));
 
-      // Return updated calculation
-      return {
+      // Log total calculation performance
+      const totalDuration = Date.now() - calculationStart;
+      logPerformance("calculation.complete", totalDuration, {
+        calculationId: id,
+        normalizationDuration,
+        ndcLookupDuration,
+        quantityCalculationDuration,
+        hasRxCui: !!normalized.rxcui,
+        ndcCandidateCount: ndcCandidates?.length ?? 0,
+        warningCount: newWarnings.length,
+      });
+
+      // Build updated calculation object
+      const updatedCalculation: Calculation = {
         ...calculation,
         normalizedJson: normalized,
         ndcCandidatesJson:
@@ -256,7 +294,16 @@ export async function getCalculationById(
         quantityValue,
         quantityUnit,
         warningsJson: newWarnings.length > 0 ? newWarnings : null,
+        status: "ready",
       } as Calculation;
+
+      // Track calculation metrics (non-blocking)
+      void trackCalculation(updatedCalculation, normalized).catch((error) => {
+        console.error("[Loader] Failed to track calculation metrics:", error);
+      });
+
+      // Return updated calculation
+      return updatedCalculation;
     }
   }
 

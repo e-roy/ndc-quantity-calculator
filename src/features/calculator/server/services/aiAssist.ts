@@ -4,6 +4,7 @@
  * Falls back silently if service is unavailable.
  */
 
+import { withPerformanceLogging } from "@/lib/telemetry";
 import type { NdcCandidate, NormalizedSig } from "../../types";
 import type { CalculatorInput } from "../schema";
 
@@ -39,64 +40,70 @@ export async function rankNdcCandidates(
     return null;
   }
 
-  try {
-    // Build prompt for AI ranking
-    const prompt = buildRankingPrompt(candidates, normalizedSig, input);
+  return withPerformanceLogging(
+    "ai.rankCandidates",
+    async () => {
+      try {
+        // Build prompt for AI ranking
+        const prompt = buildRankingPrompt(candidates, normalizedSig, input);
 
-    // Call OpenAI API
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini", // Cost-effective model
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a pharmacy assistant helping to rank NDC (National Drug Code) candidates for prescriptions. Provide concise, one-line rationales for your top recommendation.",
+        // Call OpenAI API
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
           },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        temperature: 0.3, // Lower temperature for more consistent ranking
-        max_tokens: 500,
-      }),
-    });
+          body: JSON.stringify({
+            model: "gpt-4o-mini", // Cost-effective model
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are a pharmacy assistant helping to rank NDC (National Drug Code) candidates for prescriptions. Provide concise, one-line rationales for your top recommendation.",
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+            temperature: 0.3, // Lower temperature for more consistent ranking
+            max_tokens: 500,
+          }),
+        });
 
-    if (!response.ok) {
-      // Log but don't throw - silent fallback
-      console.log(
-        `[AI Assist] API error: ${response.status} ${response.statusText}`,
-      );
-      return null;
-    }
+        if (!response.ok) {
+          // Log but don't throw - silent fallback
+          console.log(
+            `[AI Assist] API error: ${response.status} ${response.statusText}`,
+          );
+          return null;
+        }
 
-    const data = (await response.json()) as {
-      choices?: Array<{
-        message?: {
-          content?: string;
+        const data = (await response.json()) as {
+          choices?: Array<{
+            message?: {
+              content?: string;
+            };
+          }>;
         };
-      }>;
-    };
 
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) {
-      return null;
-    }
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) {
+          return null;
+        }
 
-    // Parse AI response
-    const parsed = parseAiResponse(content, candidates);
-    return parsed;
-  } catch (error) {
-    // Log but don't throw - silent fallback
-    console.log("[AI Assist] Error:", error);
-    return null;
-  }
+        // Parse AI response
+        const parsed = parseAiResponse(content, candidates);
+        return parsed;
+      } catch (error) {
+        // Log but don't throw - silent fallback
+        console.log("[AI Assist] Error:", error);
+        return null;
+      }
+    },
+    { candidateCount: candidates.length, hasSig: !!normalizedSig },
+  );
 }
 
 /**

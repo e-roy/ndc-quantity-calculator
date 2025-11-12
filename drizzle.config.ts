@@ -7,6 +7,8 @@ export default {
     "./src/server/db/schema.ts",
     "./src/server/db/auth/schema.ts",
     "./src/server/db/calculator/schema.ts",
+    "./src/server/db/metrics/schema.ts",
+    "./src/server/db/compliance/schema.ts",
   ],
   dialect: "postgresql",
   dbCredentials: {

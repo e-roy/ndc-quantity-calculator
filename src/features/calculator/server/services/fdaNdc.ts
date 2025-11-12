@@ -3,6 +3,7 @@
  * Uses the FDA Open Data API to search for NDC codes by product name or NDC.
  */
 
+import { withPerformanceLogging } from "@/lib/telemetry";
 import type { NdcCandidate } from "../../types";
 
 const FDA_BASE_URL = "https://api.fda.gov/drug/ndc.json";
@@ -341,27 +342,33 @@ export async function searchFdaNdc(
 ): Promise<NdcCandidate[]> {
   const { ndc, productName, limit = 100 } = params;
 
-  // If NDC is provided, search by NDC
-  if (ndc) {
-    return searchByNdc(ndc);
-  }
+  return withPerformanceLogging(
+    "fda.search",
+    async () => {
+      // If NDC is provided, search by NDC
+      if (ndc) {
+        return searchByNdc(ndc);
+      }
 
-  // If product name is provided, search by product name
-  if (productName) {
-    return searchByProductName(productName, limit);
-  }
+      // If product name is provided, search by product name
+      if (productName) {
+        return searchByProductName(productName, limit);
+      }
 
-  // If only RxCUI is provided, we can't directly search FDA by RxCUI
-  // This would require a mapping service or searching by a name derived from RxCUI
-  // For now, return empty array
-  if (params.rxcui) {
-    console.log(
-      "[FDA NDC] Cannot search FDA API directly by RxCUI. Product name required.",
-    );
-    return [];
-  }
+      // If only RxCUI is provided, we can't directly search FDA by RxCUI
+      // This would require a mapping service or searching by a name derived from RxCUI
+      // For now, return empty array
+      if (params.rxcui) {
+        console.log(
+          "[FDA NDC] Cannot search FDA API directly by RxCUI. Product name required.",
+        );
+        return [];
+      }
 
-  return [];
+      return [];
+    },
+    { hasNdc: !!ndc, hasProductName: !!productName, limit },
+  );
 }
 
 /**
@@ -380,16 +387,22 @@ export async function searchFdaNdcByRxNorm(
     return [];
   }
 
-  // Search FDA by the resolved product name from RxNorm
-  const candidates = await searchByProductName(rxnormResult.name, limit);
+  return withPerformanceLogging(
+    "fda.searchByRxNorm",
+    async () => {
+      // Search FDA by the resolved product name from RxNorm
+      const candidates = await searchByProductName(rxnormResult.name!, limit);
 
-  // Add RxCUI to candidates if available
-  if (rxnormResult.rxcui) {
-    return candidates.map((candidate) => ({
-      ...candidate,
-      rxCui: rxnormResult.rxcui ?? undefined,
-    }));
-  }
+      // Add RxCUI to candidates if available
+      if (rxnormResult.rxcui) {
+        return candidates.map((candidate) => ({
+          ...candidate,
+          rxCui: rxnormResult.rxcui ?? undefined,
+        }));
+      }
 
-  return candidates;
+      return candidates;
+    },
+    { rxcui: rxnormResult.rxcui, productName: rxnormResult.name, limit },
+  );
 }

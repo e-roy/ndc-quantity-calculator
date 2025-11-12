@@ -6,7 +6,8 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/server/db";
 import { users } from "@/server/db/schema";
-import { signIn, signOut } from "@/server/auth";
+import { signIn, signOut, auth } from "@/server/auth";
+import { logAuthentication } from "@/lib/audit";
 
 export type AuthActionResult =
   | { success: true }
@@ -58,8 +59,23 @@ export async function loginAction(
     })) as { error?: string } | undefined;
 
     if (result?.error) {
+      // Log failed login attempt (non-blocking)
+      void logAuthentication("login_failed", null, {
+        identifier,
+        error: result.error,
+      }).catch((auditError) => {
+        console.error("[Auth] Failed to log authentication:", auditError);
+      });
       return { success: false, error: String(result.error) };
     }
+
+    // Log successful login (non-blocking)
+    void logAuthentication("login", user.id, {
+      identifier,
+      email: user.email,
+    }).catch((auditError) => {
+      console.error("[Auth] Failed to log authentication:", auditError);
+    });
 
     // Get callback URL from form data or default to /calculator
     const callbackUrlValue = formData.get("callbackUrl");
@@ -67,6 +83,13 @@ export async function loginAction(
       typeof callbackUrlValue === "string" ? callbackUrlValue : "/calculator";
     redirect(callbackUrl);
   } catch (error) {
+    // Log failed login attempt (non-blocking)
+    void logAuthentication("login_failed", null, {
+      identifier,
+      error: error instanceof Error ? error.message : String(error),
+    }).catch((auditError) => {
+      console.error("[Auth] Failed to log authentication:", auditError);
+    });
     console.error("Login error:", error);
     return { success: false, error: "An error occurred during login" };
   }
@@ -184,6 +207,16 @@ export async function signupAction(
  */
 export async function logoutAction() {
   "use server";
+  // Get user ID before logout
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
   await signOut({ redirect: false });
+
+  // Log logout (non-blocking)
+  void logAuthentication("logout", userId).catch((auditError) => {
+    console.error("[Auth] Failed to log authentication:", auditError);
+  });
+
   redirect("/login");
 }

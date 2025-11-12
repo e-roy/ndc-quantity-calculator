@@ -5,6 +5,9 @@ import { db } from "@/lib/db";
 import { calculations } from "@/server/db/calculator/schema";
 import { CalculatorInputSchema, type CalculatorInput } from "./schema";
 import { getCalculationById } from "./loaders";
+import { recordFeedback } from "@/lib/analytics";
+import { auth } from "@/server/auth";
+import { logModification, logExport } from "@/lib/audit";
 import type { Calculation } from "../types";
 
 /**
@@ -14,6 +17,10 @@ import type { Calculation } from "../types";
 export async function createCalculation(
   input: CalculatorInput,
 ): Promise<never> {
+  // Get user ID from session for audit logging
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
   // Validate input on server side
   const validatedInput = CalculatorInputSchema.parse(input);
 
@@ -23,6 +30,7 @@ export async function createCalculation(
     .values({
       status: "pending",
       inputJson: validatedInput,
+      userId,
     })
     .returning({ id: calculations.id });
 
@@ -30,6 +38,14 @@ export async function createCalculation(
   if (!result) {
     throw new Error("Failed to create calculation: no result returned");
   }
+
+  // Log calculation creation (non-blocking)
+  void logModification("calculation", result.id, userId, {
+    action: "create",
+    drugOrNdc: validatedInput.drugOrNdc,
+  }).catch((error) => {
+    console.error("[Actions] Failed to log modification:", error);
+  });
 
   // Redirect to the results page
   redirect(`/calculator/${result.id}`);
@@ -178,12 +194,21 @@ export async function exportCalculation(
   id: string,
   format: "json" | "csv",
 ): Promise<Response> {
+  // Get user ID from session for audit logging
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
   // Fetch calculation
   const calculation = await getCalculationById(id);
 
   if (!calculation) {
     throw new Error("Calculation not found");
   }
+
+  // Log export event (non-blocking)
+  void logExport("calculation", id, format, userId).catch((error) => {
+    console.error("[Actions] Failed to log export:", error);
+  });
 
   if (format === "json") {
     // Export as JSON
@@ -206,5 +231,41 @@ export async function exportCalculation(
         "Content-Disposition": `attachment; filename="${id}-calculation.csv"`,
       },
     });
+  }
+}
+
+/**
+ * Server action to submit user feedback for a calculation.
+ * Validates rating and saves feedback to database.
+ *
+ * @param calculationId - ID of the calculation being rated
+ * @param rating - Rating from 1 to 5
+ * @param feedbackText - Optional feedback text
+ * @returns Success status or error message
+ */
+export async function submitFeedback(
+  calculationId: string,
+  rating: number,
+  feedbackText?: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    // Validate calculation exists
+    const calculation = await getCalculationById(calculationId);
+    if (!calculation) {
+      return { success: false, error: "Calculation not found" };
+    }
+
+    // Get user ID from session (optional)
+    const session = await auth();
+    const userId = session?.user?.id ?? null;
+
+    // Record feedback
+    await recordFeedback(calculationId, rating, feedbackText, userId);
+
+    return { success: true };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to submit feedback";
+    return { success: false, error: errorMessage };
   }
 }
