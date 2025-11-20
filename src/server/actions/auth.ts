@@ -102,15 +102,12 @@ export async function signupAction(
   formData: FormData,
 ): Promise<AuthActionResult> {
   const emailValue = formData.get("email");
-  const usernameValue = formData.get("username");
   const passwordValue = formData.get("password");
   const confirmPasswordValue = formData.get("confirmPassword");
   const nameValue = formData.get("name");
 
   const email =
     typeof emailValue === "string" ? emailValue.trim().toLowerCase() : null;
-  const username =
-    typeof usernameValue === "string" ? usernameValue.trim() : null;
   const password = typeof passwordValue === "string" ? passwordValue : null;
   const confirmPassword =
     typeof confirmPasswordValue === "string" ? confirmPasswordValue : null;
@@ -147,19 +144,6 @@ export async function signupAction(
       return { success: false, error: "Email already registered" };
     }
 
-    // Check if username already exists (if provided)
-    if (username) {
-      const [existingUsername] = await db
-        .select()
-        .from(users)
-        .where(eq(users.username, username))
-        .limit(1);
-
-      if (existingUsername) {
-        return { success: false, error: "Username already taken" };
-      }
-    }
-
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -168,7 +152,6 @@ export async function signupAction(
       .insert(users)
       .values({
         email,
-        username: username ?? null,
         password: hashedPassword,
         name: name ?? null,
         emailVerified: new Date(),

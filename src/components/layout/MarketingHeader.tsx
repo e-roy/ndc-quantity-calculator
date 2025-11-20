@@ -1,29 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Calculator } from "lucide-react";
 
 export function MarketingHeader() {
-  const pathname = usePathname();
-
   return (
-    <header className="bg-background/95 supports-backdrop-filter:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center space-x-2">
-          <span className="text-xl font-bold">NDC Calculator!!</span>
+    <header className="fixed top-0 z-50 w-full border-b border-white/10 bg-black/20 backdrop-blur-md transition-all duration-300 supports-backdrop-filter:bg-black/20">
+      <div className="container mx-auto flex h-16 items-center justify-between px-4">
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-white transition-opacity hover:opacity-90"
+        >
+          <Calculator className="h-6 w-6" />
+          <span className="text-xl font-bold tracking-tight">
+            NDC Calculator
+          </span>
         </Link>
 
         <nav className="flex items-center gap-6">
           <Link
-            href="/login"
-            className={`hover:text-foreground text-sm font-medium transition-colors ${
-              pathname === "/login"
-                ? "text-foreground"
-                : "text-muted-foreground"
-            }`}
+            href="#features"
+            className="hidden text-sm font-medium text-white/80 transition-colors hover:text-white sm:block"
           >
-            Login
+            Features
           </Link>
+
+          <Button asChild className="font-semibold">
+            <Link href="/login">Get Started</Link>
+          </Button>
         </nav>
       </div>
     </header>

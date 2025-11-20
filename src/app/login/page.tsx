@@ -6,8 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { type JSX, type SVGProps } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { loginAction } from "@/server/actions/auth";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { loginAction, signupAction } from "@/server/actions/auth";
 import Link from "next/link";
 
 type SearchParams = Promise<{ error?: string; callbackUrl?: string }>;
@@ -37,127 +44,193 @@ export default async function Login02({
 
   async function handleLogin(formData: FormData) {
     "use server";
-    // Add callbackUrl to form data
     formData.append("callbackUrl", callbackUrl);
     try {
       const result = await loginAction(formData);
-      // If we get here, login failed (success would have redirected)
       if (!result.success) {
         redirect(
           `/login?error=${encodeURIComponent(result.error)}&callbackUrl=${encodeURIComponent(callbackUrl)}`,
         );
       }
     } catch (err) {
-      // loginAction may redirect (which throws), that's expected
-      // Re-throw to let Next.js handle the redirect
       throw err;
     }
   }
+
+  async function handleSignup(formData: FormData) {
+    "use server";
+    formData.append("callbackUrl", callbackUrl);
+    try {
+      const result = await signupAction(formData);
+      if (!result.success) {
+        redirect(
+          `/login?error=${encodeURIComponent(result.error)}&callbackUrl=${encodeURIComponent(callbackUrl)}`,
+        );
+      }
+    } catch (err) {
+      throw err;
+    }
+  }
+
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center">
-      <div className="flex flex-1 flex-col justify-center px-4 py-10 lg:px-6">
-        <Card className="mt-4 sm:mx-auto sm:w-full sm:max-w-md">
+    <div className="bg-background flex min-h-screen items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-center text-2xl">Welcome</CardTitle>
+            <CardDescription className="text-center">
+              Sign in to your account or create a new one
+            </CardDescription>
+          </CardHeader>
           <CardContent>
-            <div className="sm:mx-auto sm:w-full sm:max-w-sm">
-              <h2 className="text-foreground text-center text-xl font-semibold">
-                Log in or create account
-              </h2>
-              {error && (
-                <div className="bg-destructive/15 text-destructive mt-4 rounded-md p-3 text-sm">
-                  {error}
-                </div>
-              )}
-              <form action={handleLogin} className="mt-6 space-y-4">
-                <div>
-                  <Label
-                    htmlFor="username-login-02"
-                    className="text-foreground dark:text-foreground text-sm font-medium"
-                  >
-                    Username or Email
-                  </Label>
-                  <Input
-                    type="text"
-                    id="username-login-02"
-                    name="username"
-                    autoComplete="username"
-                    placeholder="username or email@example.com"
-                    className="mt-2"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label
-                    htmlFor="password-login-02"
-                    className="text-foreground dark:text-foreground text-sm font-medium"
-                  >
-                    Password
-                  </Label>
-                  <Input
-                    type="password"
-                    id="password-login-02"
-                    name="password"
-                    autoComplete="current-password"
-                    placeholder="**************"
-                    className="mt-2"
-                    required
-                  />
-                </div>
-                <Button type="submit" className="mt-4 w-full py-2 font-medium">
-                  Sign in
-                </Button>
-              </form>
-
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <Separator className="w-full" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background text-muted-foreground px-2">
-                    or with
-                  </span>
-                </div>
+            {error && (
+              <div className="bg-destructive/15 text-destructive mb-4 rounded-md p-3 text-sm">
+                {error}
               </div>
+            )}
 
-              <form
-                action={async () => {
-                  "use server";
-                  await signIn("google", { redirectTo: callbackUrl });
-                }}
-              >
-                <Button
-                  variant="outline"
-                  className="flex w-full items-center justify-center space-x-2 py-2"
-                  type="submit"
-                >
-                  <GoogleIcon className="size-5" aria-hidden={true} />
-                  <span className="text-sm font-medium">
-                    Sign in with Google
-                  </span>
-                </Button>
-              </form>
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Login</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
 
-              <p className="text-muted-foreground dark:text-muted-foreground mt-4 text-xs">
-                By signing in, you agree to our{" "}
-                <a href="#" className="underline underline-offset-4">
-                  terms of service
-                </a>{" "}
-                and{" "}
-                <a href="#" className="underline underline-offset-4">
-                  privacy policy
-                </a>
-                .
-              </p>
+              <TabsContent value="login" className="min-h-[350px]">
+                <form action={handleLogin} className="space-y-4 pt-4">
+                  <div>
+                    <Label htmlFor="username-login">Username or Email</Label>
+                    <Input
+                      type="text"
+                      id="username-login"
+                      name="username"
+                      autoComplete="username"
+                      placeholder="username or email@example.com"
+                      className="mt-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password-login">Password</Label>
+                    <Input
+                      type="password"
+                      id="password-login"
+                      name="password"
+                      autoComplete="current-password"
+                      placeholder="**************"
+                      className="mt-2"
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full">
+                    Sign In
+                  </Button>
+                </form>
+              </TabsContent>
 
-              <p className="text-muted-foreground dark:text-muted-foreground mt-6 text-center text-sm">
-                Don&apos;t have an account?{" "}
-                <Link
-                  href="/signup"
-                  className="text-primary hover:text-primary/90 dark:text-primary hover:dark:text-primary/90 font-medium"
-                >
-                  Sign up
-                </Link>
-              </p>
+              <TabsContent value="signup" className="min-h-[350px]">
+                <form action={handleSignup} className="space-y-4 pt-4">
+                  <div>
+                    <Label htmlFor="email-signup">Email</Label>
+                    <Input
+                      type="email"
+                      id="email-signup"
+                      name="email"
+                      autoComplete="email"
+                      placeholder="email@example.com"
+                      className="mt-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password-signup">Password</Label>
+                    <Input
+                      type="password"
+                      id="password-signup"
+                      name="password"
+                      autoComplete="new-password"
+                      placeholder="At least 8 characters"
+                      className="mt-2"
+                      required
+                      minLength={8}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="confirm-password-signup">
+                      Confirm Password
+                    </Label>
+                    <Input
+                      type="password"
+                      id="confirm-password-signup"
+                      name="confirmPassword"
+                      autoComplete="new-password"
+                      placeholder="Confirm your password"
+                      className="mt-2"
+                      required
+                      minLength={8}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="name-signup">Full Name (Optional)</Label>
+                    <Input
+                      type="text"
+                      id="name-signup"
+                      name="name"
+                      autoComplete="name"
+                      placeholder="John Doe"
+                      className="mt-2"
+                    />
+                  </div>
+                  <Button type="submit" className="w-full">
+                    Create Account
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <Separator className="w-full" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background text-muted-foreground px-2">
+                  or continue with
+                </span>
+              </div>
             </div>
+
+            <form
+              action={async () => {
+                "use server";
+                await signIn("google", { redirectTo: callbackUrl });
+              }}
+            >
+              <Button
+                variant="outline"
+                className="flex w-full items-center justify-center space-x-2"
+                type="submit"
+              >
+                <GoogleIcon className="size-5" aria-hidden={true} />
+                <span className="text-sm font-medium">Google</span>
+              </Button>
+            </form>
+
+            <p className="text-muted-foreground mt-4 text-center text-xs">
+              By continuing, you agree to our{" "}
+              <Link
+                href="#"
+                className="hover:text-primary underline underline-offset-4"
+              >
+                terms of service
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="#"
+                className="hover:text-primary underline underline-offset-4"
+              >
+                privacy policy
+              </Link>
+              .
+            </p>
           </CardContent>
         </Card>
       </div>

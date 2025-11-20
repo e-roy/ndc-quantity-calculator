@@ -1,26 +1,17 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Hero } from "@/components/landing/Hero";
+import { ProblemSolution } from "@/components/landing/ProblemSolution";
+import { Features } from "@/components/landing/Features";
+import { HowItWorks } from "@/components/landing/HowItWorks";
+import { Cta } from "@/components/landing/Cta";
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-[calc(100vh-200px)] flex-col items-center justify-center px-4 py-16">
-      <div className="w-full max-w-2xl space-y-8 text-center">
-        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-          NDC Quantity Calculator
-        </h1>
-        <p className="text-muted-foreground text-lg sm:text-xl">
-          Calculate medication quantities quickly and accurately using NDC
-          codes.
-        </p>
-        <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
-          <Button asChild size="lg">
-            <Link href="/calculator">Open Calculator</Link>
-          </Button>
-          <Button asChild variant="outline" size="lg">
-            <Link href="/login">Login</Link>
-          </Button>
-        </div>
-      </div>
+    <div className="flex min-h-screen flex-col">
+      <Hero />
+      <ProblemSolution />
+      <Features />
+      <HowItWorks />
+      <Cta />
     </div>
   );
 }
