@@ -219,3 +219,62 @@ async function getDrugProperties(
     return { name: null };
   }
 }
+
+/**
+ * Searches for drugs matching a term.
+ * Returns a list of candidates with RxCUI and name.
+ */
+export async function searchDrugs(term: string): Promise<Array<{ name: string; rxcui: string }>> {
+  if (!term || term.trim().length < 3) {
+    return [];
+  }
+
+  try {
+    const url = `${RXNORM_BASE_URL}/REST/approximateTerm.json?term=${encodeURIComponent(term)}&maxEntries=20`;
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as {
+      approximateGroup?: {
+        candidate?: Array<{
+          rxcui?: string;
+          score?: string;
+          rank?: string;
+        }>;
+      };
+    };
+
+    const candidates = data.approximateGroup?.candidate ?? [];
+    
+    // Get names for top 10 candidates (to avoid too many API calls)
+    // In a real app, we might use a more efficient endpoint or local cache
+    const results: Array<{ name: string; rxcui: string }> = [];
+    
+    // De-duplicate RxCUIs
+    const uniqueRxcuis = new Set<string>();
+    
+    for (const candidate of candidates) {
+      if (candidate.rxcui && !uniqueRxcuis.has(candidate.rxcui)) {
+        uniqueRxcuis.add(candidate.rxcui);
+        
+        // We need to fetch the name for each RxCUI because approximateTerm doesn't always return it
+        // This is slow (N+1 problem), but RxNorm doesn't have a great bulk endpoint for this.
+        // Optimization: fast return if we hit limit
+        if (results.length >= 10) break;
+
+        const props = await getDrugProperties(candidate.rxcui);
+        if (props.name) {
+          results.push({ name: props.name, rxcui: candidate.rxcui });
+        }
+      }
+    }
+
+    return results;
+  } catch (error) {
+    console.error("[RxNorm] Search error:", error);
+    return [];
+  }
+}

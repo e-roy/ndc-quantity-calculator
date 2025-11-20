@@ -2,8 +2,9 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useSearchParams } from "next/navigation";
 import { CalculatorInputSchema, type CalculatorInput } from "../server/schema";
-import { createCalculation } from "../server/actions";
+import { createCalculation, previewSig } from "../server/actions";
 import {
   Form,
   FormControl,
@@ -24,6 +25,78 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DrugAutocomplete } from "./DrugAutocomplete";
+import { useState, useEffect } from "react";
+import type { NormalizedSig } from "../types";
+import { Badge } from "@/components/ui/badge";
+import { Check, AlertTriangle, Loader2 } from "lucide-react";
+
+function SigPreview({ sig }: { sig: string }) {
+  const [preview, setPreview] = useState<{ normalized: NormalizedSig; isComplete: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void (async () => {
+        if (!sig || sig.trim().length < 3) {
+          setPreview(null);
+          return;
+        }
+        setLoading(true);
+        try {
+          const result = await previewSig(sig);
+          setPreview(result);
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [sig]);
+
+  if (!sig) return null;
+
+  return (
+    <div className="mt-2 min-h-[40px]">
+        {loading ? (
+            <div className="flex items-center text-xs text-muted-foreground">
+                <Loader2 className="mr-2 h-3 w-3 animate-spin" /> Parsing...
+            </div>
+        ) : preview ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/50 p-2 text-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                <span className="mr-1 text-xs font-medium text-muted-foreground">Detected:</span>
+                {preview.normalized.dose !== undefined && preview.normalized.doseUnit && (
+                    <Badge variant="secondary" className="bg-background border-primary/20">
+                    {preview.normalized.dose} {preview.normalized.doseUnit}
+                    </Badge>
+                )}
+                {preview.normalized.frequencyPerDay && (
+                    <Badge variant="secondary" className="bg-background border-primary/20">
+                    {preview.normalized.frequencyPerDay}x / day
+                    </Badge>
+                )}
+                {preview.normalized.route && (
+                    <Badge variant="secondary" className="bg-background border-primary/20">
+                    {preview.normalized.route}
+                    </Badge>
+                )}
+                
+                <div className="ml-auto flex items-center">
+                    {preview.isComplete ? (
+                         <div className="flex items-center text-xs text-green-600 font-medium">
+                            <Check className="mr-1 h-3 w-3" /> Complete
+                         </div>
+                    ) : (
+                        <div className="flex items-center text-xs text-amber-600 font-medium">
+                            <AlertTriangle className="mr-1 h-3 w-3" /> Incomplete
+                         </div>
+                    )}
+                </div>
+            </div>
+        ) : null}
+    </div>
+  );
+}
 
 const EXAMPLE_INPUTS: CalculatorInput[] = [
   {
@@ -44,17 +117,19 @@ const EXAMPLE_INPUTS: CalculatorInput[] = [
 ];
 
 export function InputForm() {
+  const searchParams = useSearchParams();
   const form = useForm<CalculatorInput>({
     resolver: zodResolver(CalculatorInputSchema),
     mode: "onBlur",
     defaultValues: {
-      drugOrNdc: "",
-      sig: "",
-      daysSupply: undefined,
+      drugOrNdc: searchParams.get("drug") ?? "",
+      sig: searchParams.get("sig") ?? "",
+      daysSupply: searchParams.get("days") ? Number(searchParams.get("days")) : undefined,
     },
   });
 
   const { isSubmitting, isValid } = form.formState;
+  const sigValue = form.watch("sig");
 
   const handleSubmit = form.handleSubmit(async (data) => {
     try {
@@ -102,14 +177,16 @@ export function InputForm() {
                   <FormItem>
                     <FormLabel>Drug Name or NDC</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="e.g., Lisinopril 10mg or 68180-515-01"
-                        {...field}
+                      <DrugAutocomplete
+                        value={field.value}
+                        onChange={field.onChange}
+                        onSelect={(_rxcui, _name) => {
+                            // We could store rxcui here if we updated the schema/form state
+                        }}
                       />
                     </FormControl>
                     <FormDescription>
-                      Enter either a drug name (e.g., &quot;Lisinopril 10mg&quot;) or an
-                      NDC code (e.g., &quot;68180-515-01&quot;)
+                      Search for a medication (e.g., &quot;Lisinopril&quot;) or enter an NDC code
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -129,6 +206,7 @@ export function InputForm() {
                         {...field}
                       />
                     </FormControl>
+                    <SigPreview sig={sigValue} />
                     <FormDescription>
                       Enter the prescription instructions (SIG) as written
                     </FormDescription>

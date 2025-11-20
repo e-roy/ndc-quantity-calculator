@@ -8,7 +8,9 @@ import { getCalculationById } from "./loaders";
 import { recordFeedback } from "@/lib/analytics";
 import { auth } from "@/server/auth";
 import { logModification, logExport } from "@/lib/audit";
-import type { Calculation } from "../types";
+import type { Calculation, NormalizedSig } from "../types";
+import { parseSig, isSigComplete } from "../utils/sigParser";
+import { searchDrugs as searchRxNormDrugs } from "./services/rxnorm";
 
 /**
  * Server action to create a new calculation.
@@ -268,4 +270,24 @@ export async function submitFeedback(
       error instanceof Error ? error.message : "Failed to submit feedback";
     return { success: false, error: errorMessage };
   }
+}
+
+/**
+ * Server action to parse SIG text and return normalized values.
+ * Used for real-time preview in the UI.
+ */
+export async function previewSig(sig: string): Promise<{
+  normalized: NormalizedSig;
+  isComplete: boolean;
+}> {
+  const normalized = parseSig(sig);
+  const isComplete = isSigComplete(normalized);
+  return { normalized, isComplete };
+}
+
+/**
+ * Server action to search for drugs.
+ */
+export async function searchDrugsAction(term: string) {
+  return searchRxNormDrugs(term);
 }

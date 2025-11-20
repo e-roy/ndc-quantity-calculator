@@ -5,13 +5,13 @@ import { Geist } from "next/font/google";
 
 import { TRPCReactProvider } from "@/trpc/react";
 import { HeaderSelector } from "@/components/layout/HeaderSelector";
-import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "@/components/feedback/Toaster";
 
 export const metadata: Metadata = {
   title: "NDC Quantity Calculator",
-  description: "Calculate medication quantities quickly and accurately using NDC codes",
+  description:
+    "Calculate medication quantities quickly and accurately using NDC codes",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
@@ -28,7 +28,6 @@ export default function RootLayout({
       <body className="flex min-h-screen flex-col">
         <TRPCReactProvider>
           <HeaderSelector />
-          <Breadcrumbs />
           <main className="flex-1">{children}</main>
           <Footer />
           <Toaster />
